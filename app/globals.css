@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-manrope), system-ui, sans-serif;
+  background: #f4f1ea;
+  color: #1e293b;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-fraunces), Georgia, serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: rgba(15, 118, 110, 0.2);
+}
