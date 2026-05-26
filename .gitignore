@@ -1,7 +1,10 @@
 .next
+.vercel
+.turbo
 node_modules
 .env.local
 .env
 dist
 coverage
 *.log
+*.tsbuildinfo

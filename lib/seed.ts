@@ -3,27 +3,35 @@ import { dbConnect } from "@/lib/db";
 import User from "@/models/User";
 
 const DEFAULT_ADMIN = {
-  email: "admin@example.com",
-  password: "Password123!",
+  email: "admin@gmail.com",
+  password: "admin@123",
   role: "admin" as const
 };
 
 const DEFAULT_USER = {
-  email: "user@example.com",
-  password: "Password123!",
+  email: "user@gmail.com",
+  password: "user@123",
   role: "user" as const
 };
 
 export async function ensureSeedData() {
   await dbConnect();
-  const existing = await User.countDocuments();
-  if (existing > 0) return;
-
   const adminPassword = await bcrypt.hash(DEFAULT_ADMIN.password, 10);
   const userPassword = await bcrypt.hash(DEFAULT_USER.password, 10);
 
-  await User.create([
-    { email: DEFAULT_ADMIN.email, password: adminPassword, role: DEFAULT_ADMIN.role },
-    { email: DEFAULT_USER.email, password: userPassword, role: DEFAULT_USER.role }
-  ]);
+  await User.updateOne(
+    { email: DEFAULT_ADMIN.email },
+    { $set: { email: DEFAULT_ADMIN.email, password: adminPassword, role: DEFAULT_ADMIN.role } },
+    { upsert: true }
+  );
+
+  await User.updateOne(
+    { email: DEFAULT_USER.email },
+    { $set: { email: DEFAULT_USER.email, password: userPassword, role: DEFAULT_USER.role } },
+    { upsert: true }
+  );
+
+  await User.deleteMany({
+    email: { $in: ["admin@example.com", "user@example.com"] }
+  });
 }

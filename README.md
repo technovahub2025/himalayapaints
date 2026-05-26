@@ -9,8 +9,8 @@ Full-stack role-based dashboard built with Next.js, Tailwind CSS, MongoDB, and J
 
 ## Demo accounts
 
-- Admin: `admin@example.com` / `Password123!`
-- User: `user@example.com` / `Password123!`
+- Admin: `admin@gmail.com` / `admin@123`
+- User: `user@gmail.com` / `user@123`
 
 ## Features
 

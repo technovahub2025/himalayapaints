@@ -238,7 +238,7 @@ export function UserDashboard({ initialItems, email }: { initialItems: Item[]; e
             <div>
               <p className="text-lg font-semibold">Production Ratio Table</p>
               <p className="text-sm text-muted">
-                Percentage = item quantity divided by total quantity. The editable KG field uses those percentages to allocate the target.
+                Each admin item uses 100 KG as the base production. Enter a batch KG to scale the editable KG values instantly.
               </p>
             </div>
             <div className="grid w-full gap-3 md:max-w-sm">
