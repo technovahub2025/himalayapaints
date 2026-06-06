@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { forwardRef, type ReactNode } from "react";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -29,6 +29,7 @@ export function Button({
   variant = "primary",
   type = "button",
   disabled,
+  title,
   children,
   onClick
 }: {
@@ -36,6 +37,7 @@ export function Button({
   variant?: "primary" | "secondary" | "ghost" | "danger";
   type?: "button" | "submit";
   disabled?: boolean;
+  title?: string;
   children: ReactNode;
   onClick?: () => void;
 }) {
@@ -51,6 +53,7 @@ export function Button({
       type={type}
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className={cx(
         "inline-flex items-center justify-center rounded-2xl px-4 py-2.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50",
         styles[variant],
@@ -62,20 +65,20 @@ export function Button({
   );
 }
 
-export function Input({
-  className,
-  ...props
-}: React.InputHTMLAttributes<HTMLInputElement> & { className?: string }) {
-  return (
-    <input
-      {...props}
-      className={cx(
-        "h-11 w-full rounded-2xl border border-line bg-white px-4 text-sm text-ink outline-none transition placeholder:text-slate-400 focus:border-accent focus:ring-2 focus:ring-accent/10",
-        className
-      )}
-    />
-  );
-}
+export const Input = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement> & { className?: string }>(
+  function Input({ className, ...props }, ref) {
+    return (
+      <input
+        ref={ref}
+        {...props}
+        className={cx(
+          "h-11 w-full rounded-2xl border border-line bg-white px-4 text-sm text-ink outline-none transition placeholder:text-slate-400 focus:border-accent focus:ring-2 focus:ring-accent/10",
+          className
+        )}
+      />
+    );
+  }
+);
 
 export function Select({
   className,

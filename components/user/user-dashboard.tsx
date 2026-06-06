@@ -1,15 +1,33 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Download, FileSpreadsheet, FileText, LoaderCircle, RefreshCw, Plus, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Download, FileSpreadsheet, FileText, LoaderCircle, Printer, RefreshCw, Plus, Trash2 } from "lucide-react";
+import { jsPDF } from "jspdf";
+import * as XLSX from "xlsx-js-style";
 import { calculateGrandTotal, safePercent, scaleQuantity } from "@/lib/calculations";
-import { Button, Card, CardBody, CardHeader, Input, Subtitle, Title } from "@/components/ui";
+import { Button, Card, CardBody, CardHeader, Input, Select, Subtitle, Title } from "@/components/ui";
 import { SummaryCards } from "@/components/summary-cards";
 import { toast } from "sonner";
 
-type Item = { _id: string; name: string; quantity: number; rate: number; amount: number };
+type Item = { _id: string; tableName: string; name: string; quantity: number; rate: number; amount: number };
 
 type PackRow = { packSize: string; quantity: string };
+
+type BatchDetails = {
+  product: string;
+  batchNo: string;
+  date: string;
+  batchSize: string;
+  specificGravity: string;
+  viscosity: string;
+};
+
+type MetaField = {
+  label: string;
+  value: string;
+  widthClass?: string;
+};
 
 type ExportRow = {
   percentage: string;
@@ -19,35 +37,197 @@ type ExportRow = {
   suggestedKg: number;
 };
 
-export function UserDashboard({ initialItems, email }: { initialItems: Item[]; email?: string }) {
+type UserDraft = {
+  actuals: Record<string, string>;
+  batchDetails: BatchDetails;
+  manualKgValues: Record<string, string>;
+  packRows: PackRow[];
+  remarks: Record<string, string>;
+  signatures: Record<string, string>;
+  targetKg: string;
+};
+
+const EMPTY_BATCH_DETAILS: BatchDetails = {
+  product: "",
+  batchNo: "",
+  date: "",
+  batchSize: "",
+  specificGravity: "",
+  viscosity: ""
+};
+
+const EMPTY_PACK_ROWS: PackRow[] = [{ packSize: "", quantity: "" }];
+const USER_DRAFT_PREFIX = "himalayapaints:user-dashboard-draft:";
+
+export function UserDashboard({
+  initialItems,
+  initialTableName,
+  tableNames,
+  email
+}: {
+  initialItems: Item[];
+  initialTableName: string;
+  tableNames: string[];
+  email?: string;
+}) {
+  const router = useRouter();
+  const [tableName, setTableName] = useState(initialTableName);
   const [items, setItems] = useState<Item[]>(initialItems);
+  const [availableTables, setAvailableTables] = useState<string[]>(
+    Array.from(new Set([initialTableName, ...tableNames.filter(Boolean)])).sort()
+  );
   const [targetKg, setTargetKg] = useState("100");
   const [manualKgValues, setManualKgValues] = useState<Record<string, string>>({});
   const [actuals, setActuals] = useState<Record<string, string>>({});
-  const [packRows, setPackRows] = useState<PackRow[]>([{ packSize: "", quantity: "" }]);
+  const [remarks, setRemarks] = useState<Record<string, string>>({});
+  const [signatures, setSignatures] = useState<Record<string, string>>({});
+  const [packRows, setPackRows] = useState<PackRow[]>(EMPTY_PACK_ROWS);
+  const [batchDetails, setBatchDetails] = useState<BatchDetails>(EMPTY_BATCH_DETAILS);
   const [loading, setLoading] = useState(false);
+  const restoringDraftRef = useRef<string | null>(null);
+
+  const batchMetaFields: MetaField[] = [
+    { label: "PRODUCT", value: batchDetails.product, widthClass: "md:col-span-2" },
+    { label: "BATCH NO", value: batchDetails.batchNo },
+    { label: "DATE", value: batchDetails.date },
+    { label: "BATCH SIZE", value: batchDetails.batchSize },
+    { label: "SPECIFIC GRAVITY", value: batchDetails.specificGravity },
+    { label: "VISCOSITY (SEC)", value: batchDetails.viscosity }
+  ];
 
   useEffect(() => {
     setItems(initialItems);
-  }, [initialItems]);
+    setTableName(initialTableName);
+    setAvailableTables(Array.from(new Set([initialTableName, ...tableNames.filter(Boolean)])).sort());
+  }, [initialItems, initialTableName, tableNames]);
+
+  function getDraftStorageKey(name: string) {
+    return `${USER_DRAFT_PREFIX}${name.trim() || "Table 1"}`;
+  }
+
+  function loadSavedDraft(name: string) {
+    if (typeof window === "undefined") return null;
+    const raw = window.localStorage.getItem(getDraftStorageKey(name));
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw) as Partial<UserDraft>;
+      return {
+        actuals: parsed.actuals ?? {},
+        batchDetails: { ...EMPTY_BATCH_DETAILS, ...(parsed.batchDetails ?? {}) },
+        manualKgValues: parsed.manualKgValues ?? {},
+        packRows: parsed.packRows?.length ? parsed.packRows : EMPTY_PACK_ROWS,
+        remarks: parsed.remarks ?? {},
+        signatures: parsed.signatures ?? {},
+        targetKg: parsed.targetKg ?? "100"
+      } satisfies UserDraft;
+    } catch {
+      return null;
+    }
+  }
+
+  function saveCurrentDraft(name: string) {
+    if (typeof window === "undefined") return;
+    const draft: UserDraft = {
+      actuals,
+      batchDetails,
+      manualKgValues,
+      packRows,
+      remarks,
+      signatures,
+      targetKg
+    };
+    window.localStorage.setItem(getDraftStorageKey(name), JSON.stringify(draft));
+  }
+
+  function clearSavedDraft(name: string) {
+    if (typeof window === "undefined") return;
+    window.localStorage.removeItem(getDraftStorageKey(name));
+  }
+
+  function resetDraftState() {
+    setTargetKg("100");
+    setManualKgValues({});
+    setActuals({});
+    setRemarks({});
+    setSignatures({});
+    setPackRows(EMPTY_PACK_ROWS);
+    setBatchDetails(EMPTY_BATCH_DETAILS);
+  }
 
   useEffect(() => {
-    setManualKgValues({});
-  }, [targetKg]);
+    const savedDraft = loadSavedDraft(tableName);
+    restoringDraftRef.current = tableName;
+    if (savedDraft) {
+      setTargetKg(savedDraft.targetKg);
+      setManualKgValues(savedDraft.manualKgValues);
+      setActuals(savedDraft.actuals);
+      setRemarks(savedDraft.remarks);
+      setSignatures(savedDraft.signatures);
+      setPackRows(savedDraft.packRows);
+      setBatchDetails(savedDraft.batchDetails);
+    } else {
+      resetDraftState();
+    }
 
-  async function refreshItems() {
+    const timer = window.setTimeout(() => {
+      restoringDraftRef.current = null;
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [tableName]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (restoringDraftRef.current === tableName) return;
+    saveCurrentDraft(tableName);
+  }, [actuals, batchDetails, manualKgValues, packRows, remarks, signatures, tableName, targetKg]);
+
+  function updateBatchDetail(key: keyof BatchDetails, value: string) {
+    setBatchDetails((current) => ({
+      ...current,
+      [key]: value
+    }));
+  }
+
+  function handleTargetKgChange(value: string) {
+    setTargetKg(value);
+    setManualKgValues({});
+  }
+
+  function clearCurrentDraft() {
+    if (typeof window !== "undefined") {
+      const confirmed = window.confirm(`Clear the saved draft for ${tableName || "this table"}?`);
+      if (!confirmed) return;
+      clearSavedDraft(tableName);
+    }
+    restoringDraftRef.current = tableName;
+    resetDraftState();
+    window.setTimeout(() => {
+      restoringDraftRef.current = null;
+    }, 0);
+  }
+
+  async function loadTable(nextTableName: string) {
+    const trimmed = nextTableName.trim() || "Table 1";
     setLoading(true);
     try {
-      const response = await fetch("/api/items");
+      router.replace(`/user?tableName=${encodeURIComponent(trimmed)}`);
+      const response = await fetch(`/api/items?tableName=${encodeURIComponent(trimmed)}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || "Failed to load items");
-      setItems(data.items);
+      setItems(data.items ?? []);
+      setTableName(trimmed);
+      setAvailableTables(Array.from(new Set([trimmed, ...((data.tables ?? []) as string[]).filter(Boolean)])).sort());
       toast.success("Latest admin data loaded");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to load items");
     } finally {
       setLoading(false);
     }
+  }
+
+  async function refreshItems() {
+    await loadTable(tableName);
   }
 
   const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
@@ -71,6 +251,14 @@ export function UserDashboard({ initialItems, email }: { initialItems: Item[]; e
       result
     };
   });
+  const exportPackRows = packRows
+    .filter((row) => row.packSize.trim() !== "" || row.quantity.trim() !== "")
+    .map((row) => ({
+      packSize: row.packSize,
+      quantity: row.quantity,
+      result: Number(row.packSize || 0) * Number(row.quantity || 0)
+    }));
+  const hasPackData = exportPackRows.length > 0;
 
   const exportRows: ExportRow[] = items.map((item) => {
     const percentage = safePercent(item.quantity, totalQuantity);
@@ -84,142 +272,409 @@ export function UserDashboard({ initialItems, email }: { initialItems: Item[]; e
     };
   });
 
-  function buildCsv() {
-    const header = ["Percentage", "Source", "Editable KG Input", "Actuals"];
-    const lines = exportRows.map((row) =>
-      [row.percentage, row.source, row.editableKgInput, row.actuals]
-        .map((value) => `"${String(value).replace(/"/g, '""')}"`)
-        .join(",")
-    );
-    return [header.join(","), ...lines].join("\n");
+  const exportTableRows = items.map((item) => {
+    const percentage = safePercent(item.quantity, totalQuantity);
+    const suggestedKg = scaleQuantity(item.quantity, targetNumber);
+    return {
+      percentage: `${percentage.toFixed(2)}%`,
+      source: item.name,
+      stdQty: manualKgValues[item._id] ?? String(suggestedKg),
+      actualQty: actuals[item._id] ?? "",
+      remarks: remarks[item._id] ?? "",
+      signature: signatures[item._id] ?? ""
+    };
+  });
+
+  function formatKgValue(value: string | number) {
+    const normalized = String(value).trim();
+    return normalized ? `${normalized} kg` : "";
   }
 
-  async function exportCsv() {
-    const csv = buildCsv();
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "user-table.csv";
-    link.click();
-    URL.revokeObjectURL(url);
+  function formatSecondsValue(value: string | number) {
+    const normalized = String(value).trim();
+    return normalized ? `${normalized} sec` : "";
+  }
+
+  function getRemarkValue(itemId: string) {
+    return remarks[itemId] ?? "";
+  }
+
+  function getSignatureValue(itemId: string) {
+    return signatures[itemId] ?? "";
   }
 
   async function exportExcel() {
-    const XLSX = await import("xlsx");
     const worksheetData = [
-      ["Percentage", "Source", "Editable KG Input", "Actuals"],
-      ...exportRows.map((row) => [row.percentage, row.source, row.editableKgInput, row.actuals])
+      ["PRODUCTION BATCH SHEET"],
+      ["PRODUCT:", batchDetails.product || "", "", "BATCH SIZE", "SPECIFIC GRAVITY", "VISCOSITY"],
+      ["BATCH NO", batchDetails.batchNo || "", "STD:", targetKg ? `${Number(targetKg).toLocaleString()} KG` : "", batchDetails.specificGravity || "", formatSecondsValue(batchDetails.viscosity)],
+      ["DATE", batchDetails.date || "", "ACTUAL:", `${distributedTotal.toLocaleString()} KG`, "", ""],
+      [],
+      ["%", "RAW MATERIAL CODE", "STD QTY", "ACTUAL QTY", "REMARKS", "SIGNATURE"],
+      ...exportTableRows.map((row) => [row.percentage, row.source, row.stdQty, row.actualQty, row.remarks, row.signature]),
+      ["TOTAL", "Dynamic source list", `${distributedTotal.toLocaleString()} KG`, "Manual actuals only", "Remarks", "Signature"]
     ];
+    if (hasPackData) {
+      worksheetData.push([], ["PACK SIZE", "QTY", "TOTAL"], ...exportPackRows.map((row) => [row.packSize, row.quantity, String(row.result)]), ["BULK", "", "TOTAL"]);
+    }
     const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+    const border = {
+      top: { style: "thin", color: { rgb: "000000" } },
+      bottom: { style: "thin", color: { rgb: "000000" } },
+      left: { style: "thin", color: { rgb: "000000" } },
+      right: { style: "thin", color: { rgb: "000000" } }
+    };
+    const titleFill = { patternType: "solid", fgColor: { rgb: "F3F4F6" } };
+    const headerFill = { patternType: "solid", fgColor: { rgb: "E5E7EB" } };
+    const center = { horizontal: "center", vertical: "center", wrapText: true };
+    const left = { horizontal: "left", vertical: "center", wrapText: true };
+    const boldFont = { bold: true, color: { rgb: "000000" } };
+    const regularFont = { color: { rgb: "000000" } };
+
+    function ensureCell(row: number, col: number) {
+      const address = XLSX.utils.encode_cell({ r: row, c: col });
+      if (!worksheet[address]) {
+        worksheet[address] = { t: "s", v: "" };
+      }
+      return worksheet[address];
+    }
+
+    function styleRange(startRow: number, endRow: number, startCol: number, endCol: number, style: Record<string, unknown>) {
+      for (let row = startRow; row <= endRow; row += 1) {
+        for (let col = startCol; col <= endCol; col += 1) {
+          const cell = ensureCell(row, col);
+          cell.s = {
+            ...(cell.s ?? {}),
+            ...style
+          };
+        }
+      }
+    }
+
+    const rawDataStart = 6;
+    const rawDataEnd = rawDataStart + exportTableRows.length - 1;
+    const rawTotalRow = rawDataEnd + 1;
+    const packHeaderRow = rawTotalRow + 2;
+    const packDataStart = packHeaderRow + 1;
+    const packDataEnd = packDataStart + exportPackRows.length - 1;
+    const packTotalRow = packDataEnd + 1;
+
+    worksheet["!cols"] = [
+      { wch: 16 },
+      { wch: 28 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 18 },
+      { wch: 18 }
+    ];
+    worksheet["!rows"] = worksheetData.map(() => ({ hpt: 20 }));
+    worksheet["!rows"][0] = { hpt: 24 };
+    worksheet["!rows"][4] = { hpt: 8 };
+    worksheet["!rows"][5] = { hpt: 18 };
+    worksheet["!rows"][rawTotalRow] = { hpt: 20 };
+    if (hasPackData) {
+      worksheet["!rows"][packHeaderRow] = { hpt: 18 };
+      worksheet["!rows"][packTotalRow] = { hpt: 20 };
+    }
+
+    worksheet["!merges"] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }
+    ];
+
+    // Title
+    styleRange(0, 0, 0, 5, {
+      font: { ...boldFont, sz: 14 },
+      alignment: center,
+      fill: titleFill,
+      border
+    });
+
+    // Batch details rows
+    styleRange(1, 4, 0, 5, {
+      border,
+      alignment: left,
+      font: regularFont
+    });
+    styleRange(1, 1, 0, 5, {
+      fill: headerFill,
+      font: boldFont
+    });
+    styleRange(2, 4, 0, 5, {
+      fill: { patternType: "solid", fgColor: { rgb: "FFFFFF" } }
+    });
+    styleRange(1, 4, 0, 5, {
+      alignment: left
+    });
+    styleRange(1, 4, 0, 0, {
+      font: boldFont
+    });
+    styleRange(2, 4, 0, 0, {
+      font: boldFont
+    });
+    styleRange(2, 4, 2, 2, {
+      font: boldFont
+    });
+
+    // Raw material table
+    styleRange(5, rawTotalRow, 0, 5, {
+      border,
+      alignment: left,
+      font: regularFont
+    });
+    styleRange(5, 5, 0, 5, {
+      fill: headerFill,
+      font: boldFont,
+      alignment: center
+    });
+    styleRange(rawDataStart, rawTotalRow - 1, 0, 5, {
+      fill: { patternType: "solid", fgColor: { rgb: "FFFFFF" } }
+    });
+    styleRange(4, 4, 0, 5, {
+      fill: { patternType: "solid", fgColor: { rgb: "FFFFFF" } },
+      border: {
+        top: { style: "none" },
+        bottom: { style: "none" },
+        left: { style: "none" },
+        right: { style: "none" }
+      }
+    });
+    styleRange(rawTotalRow, rawTotalRow, 0, 5, {
+      fill: { patternType: "solid", fgColor: { rgb: "F9FAFB" } },
+      font: boldFont
+    });
+
+    if (hasPackData) {
+      // Pack size table
+      styleRange(packHeaderRow, packTotalRow, 0, 2, {
+        border,
+        alignment: center,
+        font: regularFont
+      });
+      styleRange(packHeaderRow, packHeaderRow, 0, 2, {
+        fill: headerFill,
+        font: boldFont
+      });
+      styleRange(packTotalRow, packTotalRow, 0, 2, {
+        fill: { patternType: "solid", fgColor: { rgb: "F9FAFB" } },
+        font: boldFont
+      });
+    }
+
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "User Table");
-    XLSX.writeFile(workbook, "user-table.xlsx");
+    XLSX.writeFile(workbook, `${tableName || "table"}-production-sheet.xlsx`);
   }
 
   async function exportPdf() {
-    const { jsPDF } = await import("jspdf");
-    const autoTableModule = await import("jspdf-autotable");
-    const autoTable = autoTableModule.default ?? autoTableModule.autoTable;
-    const doc = new jsPDF();
+    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+    const pageWidth = 297;
+    const marginX = 5;
+    const gridWidth = pageWidth - marginX * 2;
+    const colWidths = [18, 95, 28, 34, 55, 57];
+    const xPositions = [
+      marginX,
+      marginX + colWidths[0],
+      marginX + colWidths[0] + colWidths[1],
+      marginX + colWidths[0] + colWidths[1] + colWidths[2],
+      marginX + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3],
+      marginX + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3] + colWidths[4]
+    ];
 
-    doc.setFontSize(16);
-    doc.text("User Table", 14, 16);
-    doc.setFontSize(10);
-    doc.text(`Target KG: ${targetNumber.toLocaleString()}`, 14, 24);
+    const drawCell = (
+      x: number,
+      y: number,
+      w: number,
+      h: number,
+      text = "",
+      opts?: {
+        align?: "left" | "center" | "right";
+        bold?: boolean;
+        fillColor?: [number, number, number] | null;
+        textColor?: [number, number, number];
+        fontSize?: number;
+        paddingX?: number;
+      }
+    ) => {
+      const {
+        align = "left",
+        bold = false,
+        fillColor = null,
+        textColor = [0, 0, 0],
+        fontSize = 7.5,
+        paddingX = 2
+      } = opts ?? {};
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.2);
+      if (fillColor) {
+        doc.setFillColor(fillColor[0], fillColor[1], fillColor[2]);
+        doc.rect(x, y, w, h, "FD");
+      } else {
+        doc.rect(x, y, w, h);
+      }
+      doc.setFont("helvetica", bold ? "bold" : "normal");
+      doc.setFontSize(fontSize);
+      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+      const textY = y + h / 2 + fontSize / 3.4;
+      const textX = align === "center" ? x + w / 2 : align === "right" ? x + w - paddingX : x + paddingX;
+      doc.text(String(text ?? ""), textX, textY, {
+        align,
+        maxWidth: w - paddingX * 2
+      });
+    };
 
-    autoTable(doc, {
-      startY: 30,
-      head: [["Percentage", "Source", "Editable KG Input", "Actuals"]],
-      body: exportRows.map((row) => [row.percentage, row.source, row.editableKgInput, row.actuals])
+    let y = 6;
+    drawCell(marginX, y, gridWidth, 7, "PRODUCTION BATCH SHEET", {
+      align: "center",
+      bold: true,
+      fontSize: 9.5
     });
 
-    doc.save("user-table.pdf");
+    y += 7;
+    drawCell(xPositions[0], y, colWidths[0], 7, "PRODUCT:", { bold: true });
+    drawCell(xPositions[1], y, colWidths[1] + colWidths[2], 7, batchDetails.product || "", { bold: false });
+    drawCell(xPositions[3], y, colWidths[3], 7, "BATCH SIZE", { bold: true });
+    drawCell(xPositions[4], y, colWidths[4], 7, "SPECIFIC GRAVITY", { bold: true });
+    drawCell(xPositions[5], y, colWidths[5], 7, "VISCOSITY", { bold: true });
+
+    y += 7;
+    drawCell(xPositions[0], y, colWidths[0], 7, "BATCH NO", { bold: true });
+    drawCell(xPositions[1], y, colWidths[1], 7, batchDetails.batchNo || "", { bold: false });
+    drawCell(xPositions[2], y, colWidths[2], 7, "STD:", { bold: true });
+    drawCell(xPositions[3], y, colWidths[3], 7, targetKg ? `${Number(targetKg).toLocaleString()} KG` : "", { bold: false });
+    drawCell(xPositions[4], y, colWidths[4], 7, batchDetails.specificGravity || "", { bold: false });
+    drawCell(xPositions[5], y, colWidths[5], 7, formatSecondsValue(batchDetails.viscosity), { bold: false });
+
+    y += 7;
+    drawCell(xPositions[0], y, colWidths[0], 7, "DATE", { bold: true });
+    drawCell(xPositions[1], y, colWidths[1], 7, batchDetails.date || "", { bold: false });
+    drawCell(xPositions[2], y, colWidths[2], 7, "ACTUAL:", { bold: true });
+    drawCell(xPositions[3], y, colWidths[3], 7, `${distributedTotal.toLocaleString()} KG`, { bold: false });
+    drawCell(xPositions[4], y, colWidths[4], 7, "", { bold: false });
+    drawCell(xPositions[5], y, colWidths[5], 7, "", { bold: false });
+
+    // Split the batch details block from the raw material table so the PDF reads
+    // like two separate tables, matching the reference layout.
+    y += 10;
+
+    drawCell(xPositions[0], y, colWidths[0], 7, "%", { bold: true });
+    drawCell(xPositions[1], y, colWidths[1], 7, "RAW MATERIAL CODE", { bold: true });
+    drawCell(xPositions[2], y, colWidths[2], 7, "STD QTY", { bold: true });
+    drawCell(xPositions[3], y, colWidths[3], 7, "ACTUAL QTY", { bold: true });
+    drawCell(xPositions[4], y, colWidths[4], 7, "REMARKS", { bold: true });
+    drawCell(xPositions[5], y, colWidths[5], 7, "SIGNATURE", { bold: true });
+
+    const mainRows = items.length;
+    const rowHeight = 7;
+    y += 7;
+
+    for (let i = 0; i < mainRows; i += 1) {
+      const item = items[i];
+      const percentage = safePercent(item.quantity, totalQuantity).toFixed(2);
+      const suggestedKg = scaleQuantity(item.quantity, targetNumber);
+      const kgValue = manualKgValues[item._id] ?? String(suggestedKg);
+      const actualValue = actuals[item._id] ?? "";
+      const remarkValue = getRemarkValue(item._id);
+      const signatureValue = getSignatureValue(item._id);
+      drawCell(xPositions[0], y, colWidths[0], rowHeight, `${percentage}%`, { align: "center" });
+      drawCell(xPositions[1], y, colWidths[1], rowHeight, item.name, { align: "left" });
+      drawCell(xPositions[2], y, colWidths[2], rowHeight, formatKgValue(kgValue), { align: "center" });
+      drawCell(xPositions[3], y, colWidths[3], rowHeight, actualValue, { align: "center" });
+      drawCell(xPositions[4], y, colWidths[4], rowHeight, remarkValue, { align: "left" });
+      drawCell(xPositions[5], y, colWidths[5], rowHeight, signatureValue, { align: "left" });
+      y += rowHeight;
+    }
+
+    // Leave a visible white band between the two separate tables.
+    y += 10;
+
+    const packBodyRows = exportPackRows.length;
+
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.2);
+
+    if (hasPackData) {
+      drawCell(xPositions[0], y, colWidths[0], rowHeight, "PACK SIZE", {
+        bold: true,
+        textColor: [220, 38, 38]
+      });
+      drawCell(xPositions[1], y, colWidths[1], rowHeight, "QTY", {
+        bold: true,
+        textColor: [220, 38, 38]
+      });
+      drawCell(xPositions[2], y, colWidths[2], rowHeight, "TOTAL", {
+        bold: true,
+        textColor: [220, 38, 38]
+      });
+      y += rowHeight;
+
+      for (let i = 0; i < packBodyRows; i += 1) {
+        const row = exportPackRows[i];
+        drawCell(xPositions[0], y, colWidths[0], rowHeight, row?.packSize || "", { align: "center" });
+        drawCell(xPositions[1], y, colWidths[1], rowHeight, row?.quantity || "", { align: "center" });
+        drawCell(xPositions[2], y, colWidths[2], rowHeight, row ? String(row.result) : "", { align: "center" });
+        y += rowHeight;
+      }
+
+      drawCell(xPositions[0], y, colWidths[0], rowHeight, "BULK", {
+        bold: true,
+        textColor: [220, 38, 38]
+      });
+      drawCell(xPositions[1], y, colWidths[1], rowHeight, "", { align: "center" });
+      drawCell(xPositions[2], y, colWidths[2], rowHeight, "TOTAL", {
+        bold: true,
+        textColor: [220, 38, 38]
+      });
+    }
+
+    doc.save(`${tableName || "table"}-production-sheet.pdf`);
   }
 
-  function buildPackCsv() {
-    const header = ["Row", "Pack Size", "Quantity", "Result"];
-    const lines = [
-      ...packExportRows.map((row) =>
-        [row.rowNumber, row.packSize, row.quantity, row.result]
-          .map((value) => `"${String(value).replace(/"/g, '""')}"`)
-          .join(",")
-      ),
-      ["Grand Total", "", "", packGrandTotal].map((value) => `"${String(value).replace(/"/g, '""')}"`).join(",")
-    ];
-    return [header.join(","), ...lines].join("\n");
-  }
-
-  async function exportPackCsv() {
-    const csv = buildPackCsv();
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "pack-size-calculator.csv";
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
-  async function exportPackExcel() {
-    const XLSX = await import("xlsx");
-    const worksheetData = [
-      ["Row", "Pack Size", "Quantity", "Result"],
-      ...packExportRows.map((row) => [row.rowNumber, row.packSize, row.quantity, row.result]),
-      ["Grand Total", "", "", packGrandTotal]
-    ];
-    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Pack Calculator");
-    XLSX.writeFile(workbook, "pack-size-calculator.xlsx");
-  }
-
-  async function exportPackPdf() {
-    const { jsPDF } = await import("jspdf");
-    const autoTableModule = await import("jspdf-autotable");
-    const autoTable = autoTableModule.default ?? autoTableModule.autoTable;
-    const doc = new jsPDF();
-
-    doc.setFontSize(16);
-    doc.text("Pack Size Calculator", 14, 16);
-
-    autoTable(doc, {
-      startY: 24,
-      head: [["Row", "Pack Size", "Quantity", "Result"]],
-      body: [
-        ...packExportRows.map((row) => [String(row.rowNumber), row.packSize, row.quantity, row.result.toLocaleString()]),
-        ["Grand Total", "", "", packGrandTotal.toLocaleString()]
-      ]
-    });
-
-    doc.save("pack-size-calculator.pdf");
+  function handlePrint() {
+    window.print();
   }
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
+        <div className="max-w-2xl">
           <Title>User Dashboard</Title>
           <Subtitle>Read-only master data from admin with live percentage distribution and production outputs.</Subtitle>
           {email ? <p className="mt-2 text-sm text-muted">Signed in as {email}</p> : null}
         </div>
-        <div className="flex flex-wrap gap-3">
-          <Button variant="secondary" onClick={exportCsv}>
-            <Download className="mr-2 h-4 w-4" />
-            Export CSV
-          </Button>
-          <Button variant="secondary" onClick={exportExcel}>
-            <FileSpreadsheet className="mr-2 h-4 w-4" />
-            Export Excel
-          </Button>
-          <Button variant="secondary" onClick={exportPdf}>
-            <FileText className="mr-2 h-4 w-4" />
-            Export PDF
-          </Button>
-          <Button variant="secondary" onClick={refreshItems} disabled={loading}>
-            {loading ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-            Refresh Admin Data
-          </Button>
+        <div className="w-full max-w-4xl rounded-3xl border border-line bg-white/80 p-4 shadow-sm backdrop-blur print:hidden">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div className="grid gap-2 sm:min-w-[260px]">
+              <label className="text-sm font-medium text-ink">Table Name</label>
+              <Select value={tableName} onChange={(e) => loadTable(e.target.value)}>
+                {availableTables.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="flex flex-wrap gap-3 lg:justify-end">
+              <Button variant="secondary" onClick={exportExcel}>
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Export Excel
+              </Button>
+              <Button variant="secondary" onClick={exportPdf}>
+                <FileText className="mr-2 h-4 w-4" />
+                Export PDF
+              </Button>
+              <Button variant="secondary" onClick={handlePrint}>
+                <Printer className="mr-2 h-4 w-4" />
+                Print
+              </Button>
+              <Button variant="secondary" onClick={clearCurrentDraft}>
+                Clear Draft
+              </Button>
+              <Button variant="secondary" onClick={refreshItems} disabled={loading}>
+                {loading ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                Refresh Admin Data
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -234,28 +689,86 @@ export function UserDashboard({ initialItems, email }: { initialItems: Item[]; e
 
       <Card>
         <CardHeader>
+          <div className="flex flex-col gap-2">
+            <p className="text-lg font-semibold">Batch Details</p>
+            <p className="text-sm text-muted">Enter production metadata here before exporting or printing.</p>
+          </div>
+        </CardHeader>
+        <CardBody>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {batchMetaFields.map((field) => (
+              <div
+                key={field.label}
+                className={`rounded-2xl border border-line bg-slate-50/70 px-4 py-3 ${field.widthClass ?? ""}`}
+              >
+                <label className="text-xs font-semibold tracking-[0.18em] text-muted">{field.label}</label>
+                <div className="mt-2">
+                  {field.label === "DATE" ? (
+                    <Input
+                      type="date"
+                      value={field.value}
+                      onChange={(e) => updateBatchDetail("date", e.target.value)}
+                      className="border-0 bg-transparent px-0 text-sm shadow-none focus:ring-0"
+                    />
+                      ) : (
+                    <Input
+                      value={field.value}
+                      onChange={(e) =>
+                          updateBatchDetail(
+                            field.label === "PRODUCT"
+                              ? "product"
+                              : field.label === "BATCH NO"
+                              ? "batchNo"
+                              : field.label === "BATCH SIZE"
+                              ? "batchSize"
+                              : field.label === "SPECIFIC GRAVITY"
+                              ? "specificGravity"
+                              : "viscosity",
+                          e.target.value
+                        )
+                      }
+                      placeholder={field.label === "VISCOSITY (SEC)" ? "seconds" : field.label.toLowerCase()}
+                      className="border-0 bg-transparent px-0 text-sm shadow-none focus:ring-0"
+                    />
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p className="text-lg font-semibold">Production Ratio Table</p>
+            <div className="max-w-2xl">
+              <p className="text-lg font-semibold tracking-wide">PRODUCTION RATIO TABLE</p>
               <p className="text-sm text-muted">
                 Each admin item uses 100 KG as the base production. Enter a batch KG to scale the editable KG values instantly.
               </p>
             </div>
             <div className="grid w-full gap-3 md:max-w-sm">
               <label className="text-sm font-medium text-ink">Target Production KG</label>
-              <Input type="number" min="0" step="0.01" value={targetKg} onChange={(e) => setTargetKg(e.target.value)} />
+              <Input type="number" min="0" step="0.01" value={targetKg} onChange={(e) => handleTargetKgChange(e.target.value)} />
             </div>
           </div>
         </CardHeader>
         <CardBody className="p-0">
           <div className="overflow-x-auto">
-            <table className="min-w-[900px] w-full border-collapse">
-              <thead className="bg-slate-50 text-left text-sm text-muted">
-                <tr>
-                  <th className="px-5 py-4 font-medium">Percentage</th>
-                  <th className="px-5 py-4 font-medium">Source</th>
-                  <th className="px-5 py-4 font-medium">Editable KG Input</th>
-                  <th className="px-5 py-4 font-medium">Actuals</th>
+            <table className="min-w-[1200px] w-full border-collapse border border-line bg-white">
+              <thead>
+                <tr className="bg-slate-100">
+                  <th colSpan={6} className="border-b border-line px-5 py-3 text-left text-sm font-semibold tracking-[0.14em] text-ink">
+                    RAW MATERIAL CONSUMPTION
+                  </th>
+                </tr>
+                <tr className="bg-slate-50 text-left text-sm text-muted">
+                  <th className="border-b border-line px-5 py-4 font-medium">%</th>
+                  <th className="border-b border-line px-5 py-4 font-medium">RAW MATERIAL CODE</th>
+                  <th className="border-b border-line px-5 py-4 font-medium">STD QTY</th>
+                  <th className="border-b border-line px-5 py-4 font-medium">ACTUAL QTY</th>
+                  <th className="border-b border-line px-5 py-4 font-medium">REMARKS</th>
+                  <th className="border-b border-line px-5 py-4 font-medium">SIGNATURE</th>
                 </tr>
               </thead>
               <tbody>
@@ -264,10 +777,12 @@ export function UserDashboard({ initialItems, email }: { initialItems: Item[]; e
                   const suggestedKg = scaleQuantity(item.quantity, targetNumber);
                   const kgValue = manualKgValues[item._id] ?? String(suggestedKg);
                   const actualValue = actuals[item._id] ?? "";
+                  const remarkValue = getRemarkValue(item._id);
+                  const signatureValue = getSignatureValue(item._id);
                   return (
                     <tr key={item._id} className="border-t border-line">
                       <td className="px-5 py-4 align-top">
-                        <div className="inline-flex rounded-2xl bg-accentSoft px-4 py-3 text-sm font-semibold text-accent">
+                        <div className="inline-flex rounded-2xl border border-line bg-white px-4 py-3 text-sm font-semibold text-accent">
                           {percentage.toFixed(2)}%
                         </div>
                       </td>
@@ -276,19 +791,24 @@ export function UserDashboard({ initialItems, email }: { initialItems: Item[]; e
                         <div className="mt-1 text-xs text-muted">Master qty: {item.quantity} KG</div>
                       </td>
                       <td className="px-5 py-4 align-top">
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={kgValue}
-                          onChange={(e) =>
-                            setManualKgValues((current) => ({
-                              ...current,
-                              [item._id]: e.target.value
-                            }))
-                          }
-                          placeholder={suggestedKg.toString()}
-                        />
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={kgValue}
+                            onChange={(e) =>
+                              setManualKgValues((current) => ({
+                                ...current,
+                                [item._id]: e.target.value
+                              }))
+                            }
+                            placeholder={suggestedKg.toString()}
+                          />
+                          <span className="shrink-0 text-xs font-semibold uppercase tracking-[0.16em] text-muted print:text-black">
+                            kg
+                          </span>
+                        </div>
                         <p className="mt-2 text-xs text-muted">Suggested based on percentage: {suggestedKg.toLocaleString()} KG</p>
                       </td>
                       <td className="px-5 py-4 align-top">
@@ -306,16 +826,42 @@ export function UserDashboard({ initialItems, email }: { initialItems: Item[]; e
                           placeholder="Enter actuals"
                         />
                       </td>
+                      <td className="px-5 py-4 align-top">
+                        <Input
+                          value={remarkValue}
+                          onChange={(e) =>
+                            setRemarks((current) => ({
+                              ...current,
+                              [item._id]: e.target.value
+                            }))
+                          }
+                          placeholder="Enter remarks"
+                        />
+                      </td>
+                      <td className="px-5 py-4 align-top">
+                        <Input
+                          value={signatureValue}
+                          onChange={(e) =>
+                            setSignatures((current) => ({
+                              ...current,
+                              [item._id]: e.target.value
+                            }))
+                          }
+                          placeholder="Enter signature"
+                        />
+                      </td>
                     </tr>
                   );
                 })}
               </tbody>
-              <tfoot className="border-t border-line bg-slate-50">
+              <tfoot className="bg-slate-50">
                 <tr>
-                  <td className="px-5 py-4 text-sm font-semibold text-ink">Total</td>
-                  <td className="px-5 py-4 text-sm text-muted">Dynamic source list</td>
-                  <td className="px-5 py-4 text-sm font-semibold text-ink">{distributedTotal.toLocaleString()} KG</td>
-                  <td className="px-5 py-4 text-sm text-muted">Manual actuals only</td>
+                  <td className="border-t border-line px-5 py-4 text-sm font-semibold text-ink">TOTAL</td>
+                  <td className="border-t border-line px-5 py-4 text-sm text-muted">Dynamic source list</td>
+                  <td className="border-t border-line px-5 py-4 text-sm font-semibold text-ink">{distributedTotal.toLocaleString()} KG</td>
+                  <td className="border-t border-line px-5 py-4 text-sm text-muted">Manual actuals only</td>
+                  <td className="border-t border-line px-5 py-4 text-sm text-muted">Remarks</td>
+                  <td className="border-t border-line px-5 py-4 text-sm text-muted">Signature</td>
                 </tr>
               </tfoot>
             </table>
@@ -326,23 +872,11 @@ export function UserDashboard({ initialItems, email }: { initialItems: Item[]; e
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div>
+            <div className="max-w-2xl">
               <p className="text-lg font-semibold">Pack Size Calculator</p>
-              <p className="text-sm text-muted">Result = Pack Size Ã— Quantity, with add and delete row support.</p>
+              <p className="text-sm text-muted">Result = Pack Size x Quantity, with add and delete row support.</p>
             </div>
-            <div className="flex flex-wrap gap-3">
-              <Button variant="secondary" onClick={exportPackCsv}>
-                <Download className="mr-2 h-4 w-4" />
-                Export CSV
-              </Button>
-              <Button variant="secondary" onClick={exportPackExcel}>
-                <FileSpreadsheet className="mr-2 h-4 w-4" />
-                Export Excel
-              </Button>
-              <Button variant="secondary" onClick={exportPackPdf}>
-                <FileText className="mr-2 h-4 w-4" />
-                Export PDF
-              </Button>
+            <div className="flex flex-wrap gap-3 print:hidden">
               <Button variant="secondary" onClick={() => setPackRows((current) => [...current, { packSize: "", quantity: "" }])}>
                 <Plus className="mr-2 h-4 w-4" />
                 Add Row

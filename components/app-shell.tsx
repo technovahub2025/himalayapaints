@@ -38,7 +38,7 @@ export function AppShell({ role, children, email }: ShellProps) {
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(15,118,110,0.16),_transparent_28%),linear-gradient(180deg,#f8f4ec_0%,#f3efe6_100%)] text-ink">
       <div className="mx-auto flex min-h-screen max-w-[1600px] flex-col lg:flex-row">
-        <div className="border-b border-line bg-white/80 px-4 py-3 backdrop-blur lg:hidden">
+        <div className="border-b border-line bg-white/80 px-4 py-3 backdrop-blur lg:hidden print:hidden">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent text-white shadow-soft">
@@ -66,7 +66,7 @@ export function AppShell({ role, children, email }: ShellProps) {
 
         <aside
           className={cx(
-            "fixed inset-y-0 left-0 z-40 w-[88vw] max-w-sm border-r border-line bg-white/95 px-5 py-4 shadow-2xl backdrop-blur transition-transform duration-300 lg:static lg:z-auto lg:min-h-screen lg:w-80 lg:translate-x-0 lg:border-b-0 lg:px-6 lg:py-8",
+            "fixed inset-y-0 left-0 z-40 w-[88vw] max-w-sm border-r border-line bg-white/95 px-5 py-4 shadow-2xl backdrop-blur transition-transform duration-300 lg:static lg:z-auto lg:min-h-screen lg:w-80 lg:translate-x-0 lg:border-b-0 lg:px-6 lg:py-8 print:hidden",
             open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
           )}
         >

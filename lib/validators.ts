@@ -6,6 +6,7 @@ export const loginSchema = z.object({
 });
 
 export const itemSchema = z.object({
+  tableName: z.string().trim().min(1, "Table name is required"),
   name: z.string().trim().min(1, "Item name is required"),
   quantity: z.number().nonnegative("Quantity must be 0 or greater"),
   rate: z.number().nonnegative("Rate must be 0 or greater")

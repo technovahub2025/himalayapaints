@@ -4,6 +4,7 @@ import { getAuthFromRequest } from "@/lib/auth";
 import { calculateAmount } from "@/lib/calculations";
 import { itemUpdateSchema } from "@/lib/validators";
 import Item from "@/models/Item";
+import Table from "@/models/Table";
 
 function forbidden() {
   return NextResponse.json({ message: "Forbidden" }, { status: 403 });
@@ -26,10 +27,13 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const update = parsed.data;
     const payload: Record<string, unknown> = {};
     const current = await Item.findById(id);
+    const tableName = typeof body.tableName === "string" ? body.tableName.trim() : current?.tableName ?? "Table 1";
 
     if (typeof update.name === "string") payload.name = update.name.trim();
     if (typeof update.quantity === "number") payload.quantity = update.quantity;
     if (typeof update.rate === "number") payload.rate = update.rate;
+    payload.tableName = tableName;
+    await Table.updateOne({ name: tableName }, { $set: { name: tableName } }, { upsert: true });
     if (typeof update.quantity === "number" || typeof update.rate === "number") {
       const quantity = typeof update.quantity === "number" ? update.quantity : current?.quantity ?? 0;
       const rate = typeof update.rate === "number" ? update.rate : current?.rate ?? 0;

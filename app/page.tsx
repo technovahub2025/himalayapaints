@@ -8,10 +8,8 @@ export default async function HomePage() {
   const token = cookieStore.get("auth_token")?.value;
   if (!token) redirect("/login");
 
-  try {
-    const payload = await verifyToken(token);
-    redirect(roleRedirectPath(payload.role));
-  } catch {
-    redirect("/login");
-  }
+  const payload = await verifyToken(token).catch(() => null);
+  if (!payload) redirect("/login");
+
+  redirect(roleRedirectPath(payload.role));
 }

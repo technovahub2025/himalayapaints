@@ -1,5 +1,7 @@
 import bcrypt from "bcryptjs";
 import { dbConnect } from "@/lib/db";
+import Item from "@/models/Item";
+import Table from "@/models/Table";
 import User from "@/models/User";
 
 const DEFAULT_ADMIN = {
@@ -13,6 +15,8 @@ const DEFAULT_USER = {
   password: "user@123",
   role: "user" as const
 };
+
+const DEFAULT_TABLE_NAME = "Table 1";
 
 export async function ensureSeedData() {
   await dbConnect();
@@ -34,4 +38,23 @@ export async function ensureSeedData() {
   await User.deleteMany({
     email: { $in: ["admin@example.com", "user@example.com"] }
   });
+
+  const existingItems = await Item.find({}).select("tableName").lean();
+  const distinctItemTables = Array.from(new Set(existingItems.map((item) => item.tableName).filter(Boolean))).filter(Boolean);
+  const tableNames = Array.from(new Set([DEFAULT_TABLE_NAME, ...distinctItemTables]));
+
+  for (const name of tableNames) {
+    await Table.updateOne({ name }, { $set: { name } }, { upsert: true });
+  }
+
+  await Item.updateMany(
+    {
+      $or: [
+        { tableName: { $exists: false } },
+        { tableName: null },
+        { tableName: "" }
+      ]
+    },
+    { $set: { tableName: DEFAULT_TABLE_NAME } }
+  );
 }

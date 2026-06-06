@@ -4,27 +4,39 @@ import { verifyToken } from "@/lib/auth";
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get("auth_token")?.value;
+  const isProtectedRoute = pathname.startsWith("/admin") || pathname.startsWith("/user");
 
-  if (!token) {
-    return NextResponse.redirect(new URL("/login", request.url));
+  function noStoreResponse(response: NextResponse) {
+    response.headers.set("Cache-Control", "no-store, max-age=0, must-revalidate");
+    response.headers.set("Pragma", "no-cache");
+    response.headers.set("Expires", "0");
+    return response;
+  }
+
+  if (isProtectedRoute && !token) {
+    return noStoreResponse(NextResponse.redirect(new URL("/login", request.url)));
   }
 
   try {
-    const payload = await verifyToken(token);
+    if (!isProtectedRoute) {
+      return noStoreResponse(NextResponse.next());
+    }
+
+    const payload = await verifyToken(token ?? "");
     if (pathname.startsWith("/admin") && payload.role !== "admin") {
-      return NextResponse.redirect(new URL("/user", request.url));
+      return noStoreResponse(NextResponse.redirect(new URL("/user", request.url)));
     }
     if (pathname.startsWith("/user") && payload.role !== "user" && payload.role !== "admin") {
-      return NextResponse.redirect(new URL("/admin", request.url));
+      return noStoreResponse(NextResponse.redirect(new URL("/admin", request.url)));
     }
-    return NextResponse.next();
+    return noStoreResponse(NextResponse.next());
   } catch {
     const response = NextResponse.redirect(new URL("/login", request.url));
     response.cookies.delete("auth_token");
-    return response;
+    return noStoreResponse(response);
   }
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/user/:path*"]
+  matcher: ["/((?!_next/static|_next/image|api|favicon.ico|robots.txt|sitemap.xml).*)"]
 };

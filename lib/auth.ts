@@ -1,13 +1,13 @@
 import { SignJWT, jwtVerify } from "jose";
 import type { NextRequest } from "next/server";
 
-const jwtSecret = process.env.JWT_SECRET;
-
-if (!jwtSecret) {
-  throw new Error("JWT_SECRET is not set in the environment.");
+function getSecret() {
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret) {
+    throw new Error("JWT_SECRET is not set in the environment.");
+  }
+  return new TextEncoder().encode(jwtSecret);
 }
-
-const secret = new TextEncoder().encode(jwtSecret);
 
 export type AuthRole = "admin" | "user";
 
@@ -23,11 +23,11 @@ export async function signToken(payload: AuthPayload) {
     .setSubject(payload.userId)
     .setIssuedAt()
     .setExpirationTime("7d")
-    .sign(secret);
+    .sign(getSecret());
 }
 
 export async function verifyToken(token: string) {
-  const { payload } = await jwtVerify(token, secret);
+  const { payload } = await jwtVerify(token, getSecret());
   return {
     userId: payload.sub as string,
     email: payload.email as string,

@@ -4,6 +4,7 @@ import { getAuthFromRequest } from "@/lib/auth";
 import { calculateAmount } from "@/lib/calculations";
 import { itemSchema } from "@/lib/validators";
 import Item from "@/models/Item";
+import Table from "@/models/Table";
 
 function forbidden() {
   return NextResponse.json({ message: "Forbidden" }, { status: 403 });
@@ -14,8 +15,12 @@ export async function GET(request: NextRequest) {
   if (!auth || auth.role !== "admin") return forbidden();
 
   await dbConnect();
-  const items = await Item.find().sort({ createdAt: 1 }).lean();
-  return NextResponse.json({ items });
+  const { searchParams } = new URL(request.url);
+  const tableName = searchParams.get("tableName")?.trim() || "Table 1";
+  const items = await Item.find({ tableName }).sort({ createdAt: 1 }).lean();
+  const tables = await Table.find().sort({ createdAt: 1 }).lean();
+  const tableNames = Array.from(new Set([tableName, ...tables.map((table) => table.name).filter(Boolean)])).sort();
+  return NextResponse.json({ items, tables: tableNames });
 }
 
 export async function POST(request: NextRequest) {
@@ -30,8 +35,10 @@ export async function POST(request: NextRequest) {
     }
 
     await dbConnect();
+    await Table.updateOne({ name: parsed.data.tableName.trim() }, { $set: { name: parsed.data.tableName.trim() } }, { upsert: true });
     const created = await Item.create({
       ...parsed.data,
+      tableName: parsed.data.tableName.trim(),
       amount: calculateAmount(parsed.data.quantity, parsed.data.rate)
     });
 
@@ -47,6 +54,11 @@ export async function PUT(request: NextRequest) {
 
   try {
     const body = await request.json();
+    const tableName = typeof body.tableName === "string" ? body.tableName.trim() : "";
+    if (!tableName) {
+      return NextResponse.json({ message: "Table name is required" }, { status: 400 });
+    }
+
     const rawItems: Array<{ id?: unknown; name?: unknown; quantity?: unknown; rate?: unknown } | null | undefined> = Array.isArray(body.items)
       ? body.items
       : [];
@@ -69,13 +81,14 @@ export async function PUT(request: NextRequest) {
       rate: Number(item?.rate)
     }));
 
-    const validation = normalized.map((item) => itemSchema.safeParse(item));
+    const validation = normalized.map((item) => itemSchema.safeParse({ ...item, tableName }));
     const firstInvalid = validation.find((result) => !result.success);
     if (firstInvalid && !firstInvalid.success) {
       return NextResponse.json({ message: firstInvalid.error.issues[0]?.message ?? "Invalid item list" }, { status: 400 });
     }
 
     await dbConnect();
+    await Table.updateOne({ name: tableName }, { $set: { name: tableName } }, { upsert: true });
     const keepIds: string[] = [];
     const items = [];
 
@@ -84,7 +97,7 @@ export async function PUT(request: NextRequest) {
       if (item.id) {
         const updated = await Item.findByIdAndUpdate(
           item.id,
-          { name: item.name, quantity: item.quantity, rate: item.rate, amount },
+          { tableName, name: item.name, quantity: item.quantity, rate: item.rate, amount },
           { new: true, runValidators: true }
         );
         if (updated) {
@@ -92,13 +105,13 @@ export async function PUT(request: NextRequest) {
           items.push(updated);
         }
       } else {
-        const created = await Item.create({ name: item.name, quantity: item.quantity, rate: item.rate, amount });
+        const created = await Item.create({ tableName, name: item.name, quantity: item.quantity, rate: item.rate, amount });
         keepIds.push(String(created._id));
         items.push(created);
       }
     }
 
-    await Item.deleteMany({ _id: { $nin: keepIds } });
+    await Item.deleteMany({ tableName, _id: { $nin: keepIds } });
 
     return NextResponse.json({ items });
   } catch {
