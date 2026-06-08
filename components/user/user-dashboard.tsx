@@ -6,7 +6,7 @@ import { Download, FileSpreadsheet, FileText, LoaderCircle, Printer, RefreshCw, 
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx-js-style";
 import { calculateGrandTotal, safePercent, scaleQuantity } from "@/lib/calculations";
-import { Button, Card, CardBody, CardHeader, Input, Select, Subtitle, Title } from "@/components/ui";
+import { Button, Card, CardBody, CardHeader, Input, Subtitle, Title } from "@/components/ui";
 import { SummaryCards } from "@/components/summary-cards";
 import { toast } from "sonner";
 
@@ -36,6 +36,10 @@ type ExportRow = {
   actuals: string;
   suggestedKg: number;
 };
+
+function formatProductLabel(name: string) {
+  return name.trim().replace(/\btable\b/gi, "Product");
+}
 
 type UserDraft = {
   actuals: Record<string, string>;
@@ -77,6 +81,8 @@ export function UserDashboard({
     Array.from(new Set([initialTableName, ...tableNames.filter(Boolean)])).sort()
   );
   const [targetKg, setTargetKg] = useState("100");
+  const [productSearch, setProductSearch] = useState(formatProductLabel(initialTableName));
+  const [isProductListOpen, setIsProductListOpen] = useState(false);
   const [manualKgValues, setManualKgValues] = useState<Record<string, string>>({});
   const [actuals, setActuals] = useState<Record<string, string>>({});
   const [remarks, setRemarks] = useState<Record<string, string>>({});
@@ -87,7 +93,7 @@ export function UserDashboard({
   const restoringDraftRef = useRef<string | null>(null);
 
   const batchMetaFields: MetaField[] = [
-    { label: "PRODUCT", value: batchDetails.product, widthClass: "md:col-span-2" },
+    { label: "PRODUCT", value: batchDetails.product, widthClass: "sm:col-span-2" },
     { label: "BATCH NO", value: batchDetails.batchNo },
     { label: "DATE", value: batchDetails.date },
     { label: "BATCH SIZE", value: batchDetails.batchSize },
@@ -98,6 +104,7 @@ export function UserDashboard({
   useEffect(() => {
     setItems(initialItems);
     setTableName(initialTableName);
+    setProductSearch(formatProductLabel(initialTableName));
     setAvailableTables(Array.from(new Set([initialTableName, ...tableNames.filter(Boolean)])).sort());
   }, [initialItems, initialTableName, tableNames]);
 
@@ -157,6 +164,7 @@ export function UserDashboard({
   useEffect(() => {
     const savedDraft = loadSavedDraft(tableName);
     restoringDraftRef.current = tableName;
+    setProductSearch(formatProductLabel(tableName));
     if (savedDraft) {
       setTargetKg(savedDraft.targetKg);
       setManualKgValues(savedDraft.manualKgValues);
@@ -196,7 +204,7 @@ export function UserDashboard({
 
   function clearCurrentDraft() {
     if (typeof window !== "undefined") {
-      const confirmed = window.confirm(`Clear the saved draft for ${tableName || "this table"}?`);
+      const confirmed = window.confirm(`Clear the saved draft for ${formatProductLabel(tableName || "this product")}?`);
       if (!confirmed) return;
       clearSavedDraft(tableName);
     }
@@ -217,6 +225,7 @@ export function UserDashboard({
       if (!response.ok) throw new Error(data.message || "Failed to load items");
       setItems(data.items ?? []);
       setTableName(trimmed);
+      setProductSearch(formatProductLabel(trimmed));
       setAvailableTables(Array.from(new Set([trimmed, ...((data.tables ?? []) as string[]).filter(Boolean)])).sort());
       toast.success("Latest admin data loaded");
     } catch (error) {
@@ -229,6 +238,10 @@ export function UserDashboard({
   async function refreshItems() {
     await loadTable(tableName);
   }
+
+  const filteredProducts = availableTables.filter((name) =>
+    formatProductLabel(name).toLowerCase().includes(productSearch.trim().toLowerCase())
+  );
 
   const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
   const totalAmount = calculateGrandTotal(items);
@@ -465,7 +478,7 @@ export function UserDashboard({
     XLSX.writeFile(workbook, `${tableName || "table"}-production-sheet.xlsx`);
   }
 
-  async function exportPdf() {
+  function createPdfDocument() {
     const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
     const pageWidth = 297;
     const marginX = 5;
@@ -626,50 +639,106 @@ export function UserDashboard({
       });
     }
 
+    return doc;
+  }
+
+  async function exportPdf() {
+    const doc = createPdfDocument();
     doc.save(`${tableName || "table"}-production-sheet.pdf`);
   }
 
   function handlePrint() {
-    window.print();
+    const doc = createPdfDocument();
+    doc.autoPrint();
+    const blobUrl = URL.createObjectURL(doc.output("blob"));
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    iframe.src = blobUrl;
+    iframe.onload = () => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+      window.setTimeout(() => {
+        URL.revokeObjectURL(blobUrl);
+        iframe.remove();
+      }, 1000);
+    };
+    document.body.appendChild(iframe);
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 sm:space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-2xl">
           <Title>User Dashboard</Title>
           <Subtitle>Read-only master data from admin with live percentage distribution and production outputs.</Subtitle>
           {email ? <p className="mt-2 text-sm text-muted">Signed in as {email}</p> : null}
         </div>
-        <div className="w-full max-w-4xl rounded-3xl border border-line bg-white/80 p-4 shadow-sm backdrop-blur print:hidden">
+        <div className="w-full max-w-none rounded-3xl border border-line bg-white/80 p-3 shadow-sm backdrop-blur print:hidden sm:p-4 lg:max-w-4xl">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div className="grid gap-2 sm:min-w-[260px]">
-              <label className="text-sm font-medium text-ink">Table Name</label>
-              <Select value={tableName} onChange={(e) => loadTable(e.target.value)}>
-                {availableTables.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </Select>
+            <div className="relative grid w-full gap-2 sm:min-w-[260px]">
+              <label className="text-sm font-medium text-ink">Product Name</label>
+              <Input
+                type="search"
+                value={productSearch}
+                onChange={(e) => {
+                  setProductSearch(e.target.value);
+                  setIsProductListOpen(true);
+                }}
+                onFocus={() => setIsProductListOpen(true)}
+                onBlur={() => window.setTimeout(() => setIsProductListOpen(false), 120)}
+                placeholder="Search products..."
+                aria-label="Search product"
+              />
+              {isProductListOpen ? (
+                <div className="absolute left-0 right-0 top-[72px] z-20 max-h-72 overflow-auto rounded-2xl border border-line bg-white shadow-lg">
+                  {filteredProducts.length > 0 ? (
+                    filteredProducts.slice(0, 50).map((name) => {
+                      const displayName = formatProductLabel(name);
+                      return (
+                        <button
+                          key={name}
+                          type="button"
+                          className="flex w-full items-center justify-between px-4 py-3 text-left text-sm transition hover:bg-slate-50"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            setIsProductListOpen(false);
+                            setProductSearch(displayName);
+                            loadTable(name);
+                          }}
+                        >
+                          <span>{displayName}</span>
+                          <span className="text-xs text-muted">{items.length} rows</span>
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <div className="px-4 py-3 text-sm text-muted">No matching products</div>
+                  )}
+                </div>
+              ) : null}
             </div>
-            <div className="flex flex-wrap gap-3 lg:justify-end">
-              <Button variant="secondary" onClick={exportExcel}>
+            <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-3 lg:justify-end">
+              <Button variant="secondary" onClick={exportExcel} className="w-full sm:w-auto">
                 <FileSpreadsheet className="mr-2 h-4 w-4" />
                 Export Excel
               </Button>
-              <Button variant="secondary" onClick={exportPdf}>
+              <Button variant="secondary" onClick={exportPdf} className="w-full sm:w-auto">
                 <FileText className="mr-2 h-4 w-4" />
                 Export PDF
               </Button>
-              <Button variant="secondary" onClick={handlePrint}>
+              <Button variant="secondary" onClick={handlePrint} className="w-full sm:w-auto">
                 <Printer className="mr-2 h-4 w-4" />
                 Print
               </Button>
-              <Button variant="secondary" onClick={clearCurrentDraft}>
+              <Button variant="secondary" onClick={clearCurrentDraft} className="w-full sm:w-auto">
                 Clear Draft
               </Button>
-              <Button variant="secondary" onClick={refreshItems} disabled={loading}>
+              <Button variant="secondary" onClick={refreshItems} disabled={loading} className="col-span-2 w-full sm:col-span-1 sm:w-auto">
                 {loading ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                 Refresh Admin Data
               </Button>
@@ -681,9 +750,9 @@ export function UserDashboard({
       <SummaryCards
         items={[
           { label: "Sources", value: String(items.length), hint: "Admin item names available to the user" },
-          { label: "Master Qty", value: `${totalQuantity.toLocaleString()} KG`, hint: "Total quantity from admin table" },
+          { label: "Master Qty", value: `${totalQuantity.toLocaleString()} KG`, hint: "Total quantity from admin data" },
           { label: "Target KG", value: `${Number(targetKg || 0).toLocaleString()} KG`, hint: "Used for the ratio distribution" },
-          { label: "Master Amount", value: totalAmount.toLocaleString(), hint: "Stored amount sum from admin table" }
+          { label: "Master Amount", value: totalAmount.toLocaleString(), hint: "Stored amount sum from admin data" }
         ]}
       />
 
@@ -695,7 +764,7 @@ export function UserDashboard({
           </div>
         </CardHeader>
         <CardBody>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {batchMetaFields.map((field) => (
               <div
                 key={field.label}
@@ -755,20 +824,20 @@ export function UserDashboard({
         </CardHeader>
         <CardBody className="p-0">
           <div className="overflow-x-auto">
-            <table className="min-w-[1200px] w-full border-collapse border border-line bg-white">
+            <table className="min-w-[960px] lg:min-w-[1200px] w-full border-collapse border border-line bg-white">
               <thead>
                 <tr className="bg-slate-100">
-                  <th colSpan={6} className="border-b border-line px-5 py-3 text-left text-sm font-semibold tracking-[0.14em] text-ink">
+                  <th colSpan={6} className="border-b border-line px-3 py-3 text-left text-xs font-semibold tracking-[0.14em] text-ink sm:px-5 sm:text-sm">
                     RAW MATERIAL CONSUMPTION
                   </th>
                 </tr>
                 <tr className="bg-slate-50 text-left text-sm text-muted">
-                  <th className="border-b border-line px-5 py-4 font-medium">%</th>
-                  <th className="border-b border-line px-5 py-4 font-medium">RAW MATERIAL CODE</th>
-                  <th className="border-b border-line px-5 py-4 font-medium">STD QTY</th>
-                  <th className="border-b border-line px-5 py-4 font-medium">ACTUAL QTY</th>
-                  <th className="border-b border-line px-5 py-4 font-medium">REMARKS</th>
-                  <th className="border-b border-line px-5 py-4 font-medium">SIGNATURE</th>
+                  <th className="border-b border-line px-3 py-3 text-xs font-medium sm:px-5 sm:py-4 sm:text-sm">%</th>
+                  <th className="border-b border-line px-3 py-3 text-xs font-medium sm:px-5 sm:py-4 sm:text-sm">RAW MATERIAL CODE</th>
+                  <th className="border-b border-line px-3 py-3 text-xs font-medium sm:px-5 sm:py-4 sm:text-sm">STD QTY</th>
+                  <th className="border-b border-line px-3 py-3 text-xs font-medium sm:px-5 sm:py-4 sm:text-sm">ACTUAL QTY</th>
+                  <th className="border-b border-line px-3 py-3 text-xs font-medium sm:px-5 sm:py-4 sm:text-sm">REMARKS</th>
+                  <th className="border-b border-line px-3 py-3 text-xs font-medium sm:px-5 sm:py-4 sm:text-sm">SIGNATURE</th>
                 </tr>
               </thead>
               <tbody>
@@ -781,16 +850,16 @@ export function UserDashboard({
                   const signatureValue = getSignatureValue(item._id);
                   return (
                     <tr key={item._id} className="border-t border-line">
-                      <td className="px-5 py-4 align-top">
-                        <div className="inline-flex rounded-2xl border border-line bg-white px-4 py-3 text-sm font-semibold text-accent">
+                      <td className="px-3 py-3 align-top sm:px-5 sm:py-4">
+                        <div className="inline-flex rounded-2xl border border-line bg-white px-3 py-2 text-sm font-semibold text-accent sm:px-4 sm:py-3">
                           {percentage.toFixed(2)}%
                         </div>
                       </td>
-                      <td className="px-5 py-4 align-top">
+                      <td className="px-3 py-3 align-top sm:px-5 sm:py-4">
                         <div className="text-sm font-semibold text-ink">{item.name}</div>
                         <div className="mt-1 text-xs text-muted">Master qty: {item.quantity} KG</div>
                       </td>
-                      <td className="px-5 py-4 align-top">
+                      <td className="px-3 py-3 align-top sm:px-5 sm:py-4">
                         <div className="flex items-center gap-2">
                           <Input
                             type="number"
@@ -811,7 +880,7 @@ export function UserDashboard({
                         </div>
                         <p className="mt-2 text-xs text-muted">Suggested based on percentage: {suggestedKg.toLocaleString()} KG</p>
                       </td>
-                      <td className="px-5 py-4 align-top">
+                      <td className="px-3 py-3 align-top sm:px-5 sm:py-4">
                         <Input
                           type="number"
                           min="0"
@@ -826,7 +895,7 @@ export function UserDashboard({
                           placeholder="Enter actuals"
                         />
                       </td>
-                      <td className="px-5 py-4 align-top">
+                      <td className="px-3 py-3 align-top sm:px-5 sm:py-4">
                         <Input
                           value={remarkValue}
                           onChange={(e) =>
@@ -838,7 +907,7 @@ export function UserDashboard({
                           placeholder="Enter remarks"
                         />
                       </td>
-                      <td className="px-5 py-4 align-top">
+                      <td className="px-3 py-3 align-top sm:px-5 sm:py-4">
                         <Input
                           value={signatureValue}
                           onChange={(e) =>
@@ -856,12 +925,12 @@ export function UserDashboard({
               </tbody>
               <tfoot className="bg-slate-50">
                 <tr>
-                  <td className="border-t border-line px-5 py-4 text-sm font-semibold text-ink">TOTAL</td>
-                  <td className="border-t border-line px-5 py-4 text-sm text-muted">Dynamic source list</td>
-                  <td className="border-t border-line px-5 py-4 text-sm font-semibold text-ink">{distributedTotal.toLocaleString()} KG</td>
-                  <td className="border-t border-line px-5 py-4 text-sm text-muted">Manual actuals only</td>
-                  <td className="border-t border-line px-5 py-4 text-sm text-muted">Remarks</td>
-                  <td className="border-t border-line px-5 py-4 text-sm text-muted">Signature</td>
+                  <td className="border-t border-line px-3 py-3 text-sm font-semibold text-ink sm:px-5 sm:py-4">TOTAL</td>
+                  <td className="border-t border-line px-3 py-3 text-sm text-muted sm:px-5 sm:py-4">Dynamic source list</td>
+                  <td className="border-t border-line px-3 py-3 text-sm font-semibold text-ink sm:px-5 sm:py-4">{distributedTotal.toLocaleString()} KG</td>
+                  <td className="border-t border-line px-3 py-3 text-sm text-muted sm:px-5 sm:py-4">Manual actuals only</td>
+                  <td className="border-t border-line px-3 py-3 text-sm text-muted sm:px-5 sm:py-4">Remarks</td>
+                  <td className="border-t border-line px-3 py-3 text-sm text-muted sm:px-5 sm:py-4">Signature</td>
                 </tr>
               </tfoot>
             </table>
@@ -886,12 +955,12 @@ export function UserDashboard({
         </CardHeader>
         <CardBody className="p-0">
           <div className="overflow-x-auto">
-            <table className="min-w-[760px] w-full border-collapse">
+            <table className="min-w-[560px] sm:min-w-[760px] w-full border-collapse">
               <thead className="bg-slate-50 text-left text-sm text-muted">
                 <tr>
-                  <th className="px-5 py-4 font-medium">Pack Size</th>
-                  <th className="px-5 py-4 font-medium">Quantity</th>
-                  <th className="px-5 py-4 font-medium">Result</th>
+                  <th className="px-3 py-4 font-medium sm:px-5">Pack Size</th>
+                  <th className="px-3 py-4 font-medium sm:px-5">Quantity</th>
+                  <th className="px-3 py-4 font-medium sm:px-5">Result</th>
                 </tr>
               </thead>
               <tbody>
@@ -899,7 +968,7 @@ export function UserDashboard({
                   const result = Number(row.packSize || 0) * Number(row.quantity || 0);
                   return (
                     <tr key={`${index}-${row.packSize}`} className="border-t border-line">
-                      <td className="px-5 py-4">
+                      <td className="px-3 py-3 sm:px-5 sm:py-4">
                         <Input
                           type="number"
                           min="0"
@@ -913,8 +982,8 @@ export function UserDashboard({
                           placeholder="5"
                         />
                       </td>
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-3">
+                      <td className="px-3 py-3 sm:px-5 sm:py-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                           <Input
                             type="number"
                             min="0"
@@ -922,7 +991,7 @@ export function UserDashboard({
                             value={row.quantity}
                             onChange={(e) =>
                               setPackRows((current) =>
-                                current.map((packRow, rowIndex) => (rowIndex === index ? { ...packRow, quantity: e.target.value } : packRow))
+                              current.map((packRow, rowIndex) => (rowIndex === index ? { ...packRow, quantity: e.target.value } : packRow))
                               )
                             }
                             placeholder="20"
@@ -935,14 +1004,14 @@ export function UserDashboard({
                                 return next.length > 0 ? next : [{ packSize: "", quantity: "" }];
                               })
                             }
-                            className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-line text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+                            className="inline-flex h-11 w-full items-center justify-center rounded-2xl border border-line text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 sm:w-11"
                             aria-label="Delete pack row"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
                         </div>
                       </td>
-                      <td className="px-5 py-4">
+                      <td className="px-3 py-3 sm:px-5 sm:py-4">
                         <div className="flex h-11 items-center rounded-2xl border border-line bg-slate-50 px-4 text-sm font-semibold text-ink">
                           {result.toLocaleString()}
                         </div>
@@ -953,9 +1022,9 @@ export function UserDashboard({
               </tbody>
               <tfoot className="border-t border-line bg-slate-50">
                 <tr>
-                  <td className="px-5 py-4 text-sm font-semibold text-ink">Grand Total</td>
-                  <td className="px-5 py-4 text-sm text-muted">Auto calculated</td>
-                  <td className="px-5 py-4 text-sm font-semibold text-ink">{packGrandTotal.toLocaleString()}</td>
+                  <td className="px-3 py-4 text-sm font-semibold text-ink sm:px-5">Grand Total</td>
+                  <td className="px-3 py-4 text-sm text-muted sm:px-5">Auto calculated</td>
+                  <td className="px-3 py-4 text-sm font-semibold text-ink sm:px-5">{packGrandTotal.toLocaleString()}</td>
                 </tr>
               </tfoot>
             </table>

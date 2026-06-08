@@ -37,6 +37,10 @@ function formatRate(rate: string | number) {
   return `${rate}/KG`;
 }
 
+function formatProductLabel(name: string) {
+  return name.trim().replace(/\btable\b/gi, "Product");
+}
+
 function toCsv(rows: Array<AdminRow & { amount: number }>, totalAmount: number) {
   const header = ["Item Name", "Quantity", "Rate", "Amount"];
   const lines = rows.map((row) =>
@@ -75,7 +79,7 @@ export function AdminDashboard({
   const [renameTableName, setRenameTableName] = useState(initialTableName);
   const [isRenamingTable, setIsRenamingTable] = useState(false);
   const tableNameInputRef = useRef<HTMLInputElement | null>(null);
-  const primaryActionLabel = "New Table";
+  const primaryActionLabel = "New Product";
 
   useEffect(() => {
     setTableName(initialTableName);
@@ -115,7 +119,7 @@ export function AdminDashboard({
   }, [isRenamingTable]);
 
   async function loadTable(nextTableName: string) {
-    const trimmed = nextTableName.trim() || "Table 1";
+    const trimmed = nextTableName.trim() || "Product 1";
     setTableName(trimmed);
     setRenameTableName(trimmed);
     setIsRenamingTable(false);
@@ -163,14 +167,14 @@ export function AdminDashboard({
   function getNextTableName() {
     const names = availableTables.map((table) => table.name.trim()).filter(Boolean);
     let nextIndex = 1;
-    while (names.includes(`Table ${nextIndex}`)) {
+    while (names.includes(`Product ${nextIndex}`)) {
       nextIndex += 1;
     }
-    return `Table ${nextIndex}`;
+    return `Product ${nextIndex}`;
   }
 
   function getDuplicateTableName() {
-    const baseName = `${tableName} Copy`;
+    const baseName = `${formatProductLabel(tableName)} Copy`;
     const names = availableTables.map((table) => table.name.trim()).filter(Boolean);
     if (!names.includes(baseName)) {
       return baseName;
@@ -198,7 +202,7 @@ export function AdminDashboard({
 
       await refreshTableList(trimmed);
       await loadTable(trimmed);
-      toast.success("Table created");
+      toast.success("Product created");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to create table");
     } finally {
@@ -221,7 +225,7 @@ export function AdminDashboard({
 
       await refreshTableList(trimmed);
       await loadTable(trimmed);
-      toast.success("Table duplicated");
+      toast.success("Product duplicated");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to duplicate table");
     } finally {
@@ -233,11 +237,11 @@ export function AdminDashboard({
     const fromName = tableName.trim();
     const toName = renameTableName.trim();
     if (!fromName || !toName) {
-      toast.error("Table name is required.");
+      toast.error("Product name is required.");
       return;
     }
     if (fromName === toName) {
-      toast.error("Choose a different table name.");
+      toast.error("Choose a different product name.");
       return;
     }
 
@@ -257,7 +261,7 @@ export function AdminDashboard({
       setIsRenamingTable(false);
       await loadTable(toName);
       await refreshTableList(toName);
-      toast.success("Table renamed");
+      toast.success("Product renamed");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to rename table");
     } finally {
@@ -269,7 +273,7 @@ export function AdminDashboard({
     const name = tableToDelete.trim();
     if (!name) return;
     if (availableTables.length <= 1) {
-      toast.error("At least one table must remain.");
+      toast.error("At least one product must remain.");
       return;
     }
     const confirmed = window.confirm(`Delete ${name} and all its rows?`);
@@ -285,14 +289,14 @@ export function AdminDashboard({
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || "Failed to delete table");
 
-      const fallbackTable = (data.tables?.[0]?.name as string) || "Table 1";
+      const fallbackTable = (data.tables?.[0]?.name as string) || "Product 1";
       router.replace(`/admin?tableName=${encodeURIComponent(fallbackTable)}`);
       setTableName(fallbackTable);
       setRenameTableName(fallbackTable);
       setIsRenamingTable(false);
       await loadTable(fallbackTable);
       await refreshTableList(fallbackTable);
-      toast.success("Table deleted");
+      toast.success("Product deleted");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to delete table");
     } finally {
@@ -498,8 +502,8 @@ export function AdminDashboard({
         <CardHeader>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-2xl">
-              <p className="text-lg font-semibold">Tables</p>
-              <p className="text-sm text-muted">Switch datasets quickly, create new ones, and manage the active table from one place.</p>
+              <p className="text-lg font-semibold">Products</p>
+              <p className="text-sm text-muted">Switch product datasets quickly, create new ones, and manage the active product from one place.</p>
             </div>
             <div className="flex flex-wrap gap-3">
               <Button variant="primary" onClick={createTable} disabled={loading}>
@@ -524,7 +528,7 @@ export function AdminDashboard({
               </Button>
               <Button variant="secondary" onClick={() => loadTable(tableName)} disabled={loading}>
                 {loading ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Load Table
+                Load Product
               </Button>
             </div>
           </div>
@@ -533,7 +537,7 @@ export function AdminDashboard({
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
             <div className="space-y-3">
               <div className="grid gap-2">
-                <label className="text-sm font-medium text-ink">Select Table</label>
+                <label className="text-sm font-medium text-ink">Select Product</label>
                 <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
                   <Select
                     value={tableName}
@@ -541,11 +545,14 @@ export function AdminDashboard({
                     disabled={loading || availableTables.length === 0}
                     className="lg:flex-1"
                   >
-                    {availableTables.map((table) => (
-                      <option key={table.name} value={table.name}>
-                        {table.name} ({table.count} rows)
-                      </option>
-                    ))}
+                    {availableTables.map((table) => {
+                      const displayName = formatProductLabel(table.name);
+                      return (
+                        <option key={table.name} value={table.name} label={`${displayName} (${table.count} rows)`}>
+                          {displayName} ({table.count} rows)
+                        </option>
+                      );
+                    })}
                   </Select>
                   <div className="flex gap-2">
                   <Button
@@ -553,8 +560,8 @@ export function AdminDashboard({
                     onClick={duplicateTable}
                     disabled={loading}
                     className="h-10 w-10 px-0"
-                    aria-label="Duplicate table"
-                    title="Duplicate table"
+                    aria-label="Duplicate product"
+                    title="Duplicate product"
                   >
                     <Plus className="h-4 w-4" />
                   </Button>
@@ -563,8 +570,8 @@ export function AdminDashboard({
                     onClick={() => deleteTable(tableName)}
                     disabled={loading}
                     className="h-10 w-10 px-0"
-                    aria-label="Delete table"
-                    title="Delete table"
+                    aria-label="Delete product"
+                    title="Delete product"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -579,7 +586,7 @@ export function AdminDashboard({
       <div className="space-y-6">
         <div>
           <Title>Admin Dashboard</Title>
-          <Subtitle>Maintain the item master table. Amount and totals update instantly as you type.</Subtitle>
+          <Subtitle>Maintain the item master product. Amount and totals update instantly as you type.</Subtitle>
         </div>
 
         <Card>
@@ -618,13 +625,15 @@ export function AdminDashboard({
                     type="button"
                     onDoubleClick={startRenameTable}
                     className="group inline-flex flex-col items-start text-left"
-                    title="Double-click to rename table"
+                    title="Double-click to rename product"
                   >
-                    <span className="text-lg font-semibold transition group-hover:text-accent">{tableName || "Table Items"}</span>
-                    <span className="text-sm text-muted">
-                      Items in {tableName || "this table"} are stored in KG, and each amount is calculated as Quantity x Rate.
+                    <span className="text-lg font-semibold transition group-hover:text-accent">
+                      {formatProductLabel(tableName || "Product Items")}
                     </span>
-                    <span className="mt-1 text-xs text-muted">Double-click the table name to rename it.</span>
+                    <span className="text-sm text-muted">
+                      Items in {formatProductLabel(tableName || "this product")} are stored in KG, and each amount is calculated as Quantity x Rate.
+                    </span>
+                    <span className="mt-1 text-xs text-muted">Double-click the product name to rename it.</span>
                   </button>
                 )}
               </div>
