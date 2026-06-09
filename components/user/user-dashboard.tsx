@@ -2,17 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Download, FileSpreadsheet, FileText, LoaderCircle, Printer, RefreshCw, Plus, Trash2 } from "lucide-react";
+import { Download, FileSpreadsheet, FileText, LoaderCircle, Printer, RefreshCw, Save } from "lucide-react";
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx-js-style";
 import { calculateGrandTotal, safePercent, scaleQuantity } from "@/lib/calculations";
 import { Button, Card, CardBody, CardHeader, Input, Subtitle, Title } from "@/components/ui";
 import { SummaryCards } from "@/components/summary-cards";
+import { ProductSelector } from "@/components/user/product-selector";
+import { RawMaterialTable } from "@/components/user/raw-material-table";
+import { PackSizeTable, type PackRow } from "@/components/user/pack-size-table";
+import { formatProductLabel } from "@/lib/product-label";
 import { toast } from "sonner";
 
 type Item = { _id: string; tableName: string; name: string; quantity: number; rate: number; amount: number };
-
-type PackRow = { packSize: string; quantity: string };
 
 type BatchDetails = {
   product: string;
@@ -23,12 +25,6 @@ type BatchDetails = {
   viscosity: string;
 };
 
-type MetaField = {
-  label: string;
-  value: string;
-  widthClass?: string;
-};
-
 type ExportRow = {
   percentage: string;
   source: string;
@@ -36,10 +32,6 @@ type ExportRow = {
   actuals: string;
   suggestedKg: number;
 };
-
-function formatProductLabel(name: string) {
-  return name.trim().replace(/\btable\b/gi, "Product");
-}
 
 type UserDraft = {
   actuals: Record<string, string>;
@@ -81,8 +73,6 @@ export function UserDashboard({
     Array.from(new Set([initialTableName, ...tableNames.filter(Boolean)])).sort()
   );
   const [targetKg, setTargetKg] = useState("100");
-  const [productSearch, setProductSearch] = useState(formatProductLabel(initialTableName));
-  const [isProductListOpen, setIsProductListOpen] = useState(false);
   const [manualKgValues, setManualKgValues] = useState<Record<string, string>>({});
   const [actuals, setActuals] = useState<Record<string, string>>({});
   const [remarks, setRemarks] = useState<Record<string, string>>({});
@@ -90,21 +80,12 @@ export function UserDashboard({
   const [packRows, setPackRows] = useState<PackRow[]>(EMPTY_PACK_ROWS);
   const [batchDetails, setBatchDetails] = useState<BatchDetails>(EMPTY_BATCH_DETAILS);
   const [loading, setLoading] = useState(false);
+  const [savingProduction, setSavingProduction] = useState(false);
   const restoringDraftRef = useRef<string | null>(null);
-
-  const batchMetaFields: MetaField[] = [
-    { label: "PRODUCT", value: batchDetails.product, widthClass: "sm:col-span-2" },
-    { label: "BATCH NO", value: batchDetails.batchNo },
-    { label: "DATE", value: batchDetails.date },
-    { label: "BATCH SIZE", value: batchDetails.batchSize },
-    { label: "SPECIFIC GRAVITY", value: batchDetails.specificGravity },
-    { label: "VISCOSITY (SEC)", value: batchDetails.viscosity }
-  ];
 
   useEffect(() => {
     setItems(initialItems);
     setTableName(initialTableName);
-    setProductSearch(formatProductLabel(initialTableName));
     setAvailableTables(Array.from(new Set([initialTableName, ...tableNames.filter(Boolean)])).sort());
   }, [initialItems, initialTableName, tableNames]);
 
@@ -164,7 +145,6 @@ export function UserDashboard({
   useEffect(() => {
     const savedDraft = loadSavedDraft(tableName);
     restoringDraftRef.current = tableName;
-    setProductSearch(formatProductLabel(tableName));
     if (savedDraft) {
       setTargetKg(savedDraft.targetKg);
       setManualKgValues(savedDraft.manualKgValues);
@@ -202,6 +182,57 @@ export function UserDashboard({
     setManualKgValues({});
   }
 
+  function handleManualKgChange(itemId: string, value: string) {
+    setManualKgValues((current) => ({
+      ...current,
+      [itemId]: value
+    }));
+  }
+
+  function handleActualChange(itemId: string, value: string) {
+    setActuals((current) => ({
+      ...current,
+      [itemId]: value
+    }));
+  }
+
+  function handleRemarkChange(itemId: string, value: string) {
+    setRemarks((current) => ({
+      ...current,
+      [itemId]: value
+    }));
+  }
+
+  function handleSignatureChange(itemId: string, value: string) {
+    setSignatures((current) => ({
+      ...current,
+      [itemId]: value
+    }));
+  }
+
+  function handleAddPackRow() {
+    setPackRows((current) => [...current, { packSize: "", quantity: "" }]);
+  }
+
+  function handleDeletePackRow(index: number) {
+    setPackRows((current) => {
+      const next = current.filter((_, rowIndex) => rowIndex !== index);
+      return next.length > 0 ? next : [{ packSize: "", quantity: "" }];
+    });
+  }
+
+  function handlePackSizeChange(index: number, value: string) {
+    setPackRows((current) =>
+      current.map((packRow, rowIndex) => (rowIndex === index ? { ...packRow, packSize: value } : packRow))
+    );
+  }
+
+  function handlePackQuantityChange(index: number, value: string) {
+    setPackRows((current) =>
+      current.map((packRow, rowIndex) => (rowIndex === index ? { ...packRow, quantity: value } : packRow))
+    );
+  }
+
   function clearCurrentDraft() {
     if (typeof window !== "undefined") {
       const confirmed = window.confirm(`Clear the saved draft for ${formatProductLabel(tableName || "this product")}?`);
@@ -225,7 +256,6 @@ export function UserDashboard({
       if (!response.ok) throw new Error(data.message || "Failed to load items");
       setItems(data.items ?? []);
       setTableName(trimmed);
-      setProductSearch(formatProductLabel(trimmed));
       setAvailableTables(Array.from(new Set([trimmed, ...((data.tables ?? []) as string[]).filter(Boolean)])).sort());
       toast.success("Latest admin data loaded");
     } catch (error) {
@@ -238,10 +268,6 @@ export function UserDashboard({
   async function refreshItems() {
     await loadTable(tableName);
   }
-
-  const filteredProducts = availableTables.filter((name) =>
-    formatProductLabel(name).toLowerCase().includes(productSearch.trim().toLowerCase())
-  );
 
   const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
   const totalAmount = calculateGrandTotal(items);
@@ -316,10 +342,74 @@ export function UserDashboard({
     return signatures[itemId] ?? "";
   }
 
+  async function saveProductionBatch() {
+    if (items.length === 0) {
+      toast.error("No master materials available to save.");
+      return;
+    }
+
+    const productName = tableName.trim() || "Table 1";
+    const batchNo = batchDetails.batchNo.trim();
+    const batchSize = batchDetails.batchSize.trim();
+    const specificGravity = batchDetails.specificGravity.trim();
+    const viscosity = batchDetails.viscosity.trim();
+
+    const lines = items.map((item) => {
+      const percentage = safePercent(item.quantity, totalQuantity);
+      const suggestedKg = scaleQuantity(item.quantity, targetNumber);
+      const stdQty = Number(manualKgValues[item._id] ?? suggestedKg);
+      const actualValue = actuals[item._id];
+      const actualQty = Number(actualValue || stdQty || 0);
+
+      return {
+        itemId: item._id,
+        materialName: item.name,
+        percentage,
+        stdQty,
+        actualQty,
+        remarks: remarks[item._id] ?? "",
+        signature: signatures[item._id] ?? ""
+      };
+    });
+
+    const invalidLine = lines.find((line) => Number.isNaN(line.stdQty) || Number.isNaN(line.actualQty));
+    if (invalidLine) {
+      toast.error("Please enter valid numbers for all production quantities.");
+      return;
+    }
+
+    setSavingProduction(true);
+    try {
+      const response = await fetch("/api/production", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productName,
+          batchNo,
+          batchSize,
+          specificGravity,
+          viscosity,
+          targetKg: targetNumber,
+          actualKg: distributedTotal,
+          createdBy: email ?? "",
+          lines
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Failed to save production batch");
+
+      toast.success("Production batch saved");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save production batch");
+    } finally {
+      setSavingProduction(false);
+    }
+  }
+
   async function exportExcel() {
     const worksheetData = [
       ["PRODUCTION BATCH SHEET"],
-      ["PRODUCT:", batchDetails.product || "", "", "BATCH SIZE", "SPECIFIC GRAVITY", "VISCOSITY"],
+      ["PRODUCT:", formatProductLabel(tableName || "Product 1"), "", "BATCH SIZE", "SPECIFIC GRAVITY", "VISCOSITY"],
       ["BATCH NO", batchDetails.batchNo || "", "STD:", targetKg ? `${Number(targetKg).toLocaleString()} KG` : "", batchDetails.specificGravity || "", formatSecondsValue(batchDetails.viscosity)],
       ["DATE", batchDetails.date || "", "ACTUAL:", `${distributedTotal.toLocaleString()} KG`, "", ""],
       [],
@@ -544,7 +634,7 @@ export function UserDashboard({
 
     y += 7;
     drawCell(xPositions[0], y, colWidths[0], 7, "PRODUCT:", { bold: true });
-    drawCell(xPositions[1], y, colWidths[1] + colWidths[2], 7, batchDetails.product || "", { bold: false });
+    drawCell(xPositions[1], y, colWidths[1] + colWidths[2], 7, formatProductLabel(tableName || "Product 1"), { bold: false });
     drawCell(xPositions[3], y, colWidths[3], 7, "BATCH SIZE", { bold: true });
     drawCell(xPositions[4], y, colWidths[4], 7, "SPECIFIC GRAVITY", { bold: true });
     drawCell(xPositions[5], y, colWidths[5], 7, "VISCOSITY", { bold: true });
@@ -680,49 +770,17 @@ export function UserDashboard({
         </div>
         <div className="w-full max-w-none rounded-3xl border border-line bg-white/80 p-3 shadow-sm backdrop-blur print:hidden sm:p-4 lg:max-w-4xl">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div className="relative grid w-full gap-2 sm:min-w-[260px]">
-              <label className="text-sm font-medium text-ink">Product Name</label>
-              <Input
-                type="search"
-                value={productSearch}
-                onChange={(e) => {
-                  setProductSearch(e.target.value);
-                  setIsProductListOpen(true);
-                }}
-                onFocus={() => setIsProductListOpen(true)}
-                onBlur={() => window.setTimeout(() => setIsProductListOpen(false), 120)}
-                placeholder="Search products..."
-                aria-label="Search product"
-              />
-              {isProductListOpen ? (
-                <div className="absolute left-0 right-0 top-[72px] z-20 max-h-72 overflow-auto rounded-2xl border border-line bg-white shadow-lg">
-                  {filteredProducts.length > 0 ? (
-                    filteredProducts.slice(0, 50).map((name) => {
-                      const displayName = formatProductLabel(name);
-                      return (
-                        <button
-                          key={name}
-                          type="button"
-                          className="flex w-full items-center justify-between px-4 py-3 text-left text-sm transition hover:bg-slate-50"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => {
-                            setIsProductListOpen(false);
-                            setProductSearch(displayName);
-                            loadTable(name);
-                          }}
-                        >
-                          <span>{displayName}</span>
-                          <span className="text-xs text-muted">{items.length} rows</span>
-                        </button>
-                      );
-                    })
-                  ) : (
-                    <div className="px-4 py-3 text-sm text-muted">No matching products</div>
-                  )}
-                </div>
-              ) : null}
-            </div>
-            <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-3 lg:justify-end">
+            <ProductSelector
+              value={tableName}
+              options={availableTables}
+              onSelect={loadTable}
+              disabled={loading}
+            />
+            <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3 lg:flex lg:flex-wrap lg:justify-end">
+              <Button variant="secondary" onClick={saveProductionBatch} disabled={savingProduction || loading} className="w-full sm:w-auto">
+                {savingProduction ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                Save Production
+              </Button>
               <Button variant="secondary" onClick={exportExcel} className="w-full sm:w-auto">
                 <FileSpreadsheet className="mr-2 h-4 w-4" />
                 Export Excel
@@ -738,7 +796,7 @@ export function UserDashboard({
               <Button variant="secondary" onClick={clearCurrentDraft} className="w-full sm:w-auto">
                 Clear Draft
               </Button>
-              <Button variant="secondary" onClick={refreshItems} disabled={loading} className="col-span-2 w-full sm:col-span-1 sm:w-auto">
+              <Button variant="secondary" onClick={refreshItems} disabled={loading} className="w-full sm:col-span-2 sm:w-full lg:w-auto">
                 {loading ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                 Refresh Admin Data
               </Button>
@@ -764,273 +822,83 @@ export function UserDashboard({
           </div>
         </CardHeader>
         <CardBody>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {batchMetaFields.map((field) => (
-              <div
-                key={field.label}
-                className={`rounded-2xl border border-line bg-slate-50/70 px-4 py-3 ${field.widthClass ?? ""}`}
-              >
-                <label className="text-xs font-semibold tracking-[0.18em] text-muted">{field.label}</label>
-                <div className="mt-2">
-                  {field.label === "DATE" ? (
-                    <Input
-                      type="date"
-                      value={field.value}
-                      onChange={(e) => updateBatchDetail("date", e.target.value)}
-                      className="border-0 bg-transparent px-0 text-sm shadow-none focus:ring-0"
-                    />
-                      ) : (
-                    <Input
-                      value={field.value}
-                      onChange={(e) =>
-                          updateBatchDetail(
-                            field.label === "PRODUCT"
-                              ? "product"
-                              : field.label === "BATCH NO"
-                              ? "batchNo"
-                              : field.label === "BATCH SIZE"
-                              ? "batchSize"
-                              : field.label === "SPECIFIC GRAVITY"
-                              ? "specificGravity"
-                              : "viscosity",
-                          e.target.value
-                        )
-                      }
-                      placeholder={field.label === "VISCOSITY (SEC)" ? "seconds" : field.label.toLowerCase()}
-                      className="border-0 bg-transparent px-0 text-sm shadow-none focus:ring-0"
-                    />
-                  )}
-                </div>
-              </div>
-            ))}
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-12">
+            <div className="rounded-2xl border border-line bg-slate-50/70 px-4 py-4 xl:col-span-4">
+              <label className="text-xs font-semibold tracking-[0.22em] text-muted">BATCH NO</label>
+              <Input
+                value={batchDetails.batchNo}
+                onChange={(e) => updateBatchDetail("batchNo", e.target.value)}
+                placeholder="Enter batch number"
+                className="mt-3"
+              />
+            </div>
+
+            <div className="rounded-2xl border border-line bg-slate-50/70 px-4 py-4 xl:col-span-4">
+              <label className="text-xs font-semibold tracking-[0.22em] text-muted">DATE</label>
+              <Input
+                type="date"
+                value={batchDetails.date}
+                onChange={(e) => updateBatchDetail("date", e.target.value)}
+                className="mt-3"
+              />
+            </div>
+
+            <div className="rounded-2xl border border-line bg-slate-50/70 px-4 py-4 xl:col-span-4">
+              <label className="text-xs font-semibold tracking-[0.22em] text-muted">BATCH SIZE</label>
+              <Input
+                value={batchDetails.batchSize}
+                onChange={(e) => updateBatchDetail("batchSize", e.target.value)}
+                placeholder="Enter batch size"
+                className="mt-3"
+              />
+            </div>
+
+            <div className="rounded-2xl border border-line bg-slate-50/70 px-4 py-4 xl:col-span-6">
+              <label className="text-xs font-semibold tracking-[0.22em] text-muted">SPECIFIC GRAVITY</label>
+              <Input
+                value={batchDetails.specificGravity}
+                onChange={(e) => updateBatchDetail("specificGravity", e.target.value)}
+                placeholder="Enter specific gravity"
+                className="mt-3"
+              />
+            </div>
+
+            <div className="rounded-2xl border border-line bg-slate-50/70 px-4 py-4 xl:col-span-6">
+              <label className="text-xs font-semibold tracking-[0.22em] text-muted">VISCOSITY (SEC)</label>
+              <Input
+                value={batchDetails.viscosity}
+                onChange={(e) => updateBatchDetail("viscosity", e.target.value)}
+                placeholder="Enter seconds"
+                className="mt-3"
+              />
+            </div>
           </div>
         </CardBody>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div className="max-w-2xl">
-              <p className="text-lg font-semibold tracking-wide">PRODUCTION RATIO TABLE</p>
-              <p className="text-sm text-muted">
-                Each admin item uses 100 KG as the base production. Enter a batch KG to scale the editable KG values instantly.
-              </p>
-            </div>
-            <div className="grid w-full gap-3 md:max-w-sm">
-              <label className="text-sm font-medium text-ink">Target Production KG</label>
-              <Input type="number" min="0" step="0.01" value={targetKg} onChange={(e) => handleTargetKgChange(e.target.value)} />
-            </div>
-          </div>
-        </CardHeader>
-        <CardBody className="p-0">
-          <div className="overflow-x-auto">
-            <table className="min-w-[960px] lg:min-w-[1200px] w-full border-collapse border border-line bg-white">
-              <thead>
-                <tr className="bg-slate-100">
-                  <th colSpan={6} className="border-b border-line px-3 py-3 text-left text-xs font-semibold tracking-[0.14em] text-ink sm:px-5 sm:text-sm">
-                    RAW MATERIAL CONSUMPTION
-                  </th>
-                </tr>
-                <tr className="bg-slate-50 text-left text-sm text-muted">
-                  <th className="border-b border-line px-3 py-3 text-xs font-medium sm:px-5 sm:py-4 sm:text-sm">%</th>
-                  <th className="border-b border-line px-3 py-3 text-xs font-medium sm:px-5 sm:py-4 sm:text-sm">RAW MATERIAL CODE</th>
-                  <th className="border-b border-line px-3 py-3 text-xs font-medium sm:px-5 sm:py-4 sm:text-sm">STD QTY</th>
-                  <th className="border-b border-line px-3 py-3 text-xs font-medium sm:px-5 sm:py-4 sm:text-sm">ACTUAL QTY</th>
-                  <th className="border-b border-line px-3 py-3 text-xs font-medium sm:px-5 sm:py-4 sm:text-sm">REMARKS</th>
-                  <th className="border-b border-line px-3 py-3 text-xs font-medium sm:px-5 sm:py-4 sm:text-sm">SIGNATURE</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => {
-                  const percentage = safePercent(item.quantity, totalQuantity);
-                  const suggestedKg = scaleQuantity(item.quantity, targetNumber);
-                  const kgValue = manualKgValues[item._id] ?? String(suggestedKg);
-                  const actualValue = actuals[item._id] ?? "";
-                  const remarkValue = getRemarkValue(item._id);
-                  const signatureValue = getSignatureValue(item._id);
-                  return (
-                    <tr key={item._id} className="border-t border-line">
-                      <td className="px-3 py-3 align-top sm:px-5 sm:py-4">
-                        <div className="inline-flex rounded-2xl border border-line bg-white px-3 py-2 text-sm font-semibold text-accent sm:px-4 sm:py-3">
-                          {percentage.toFixed(2)}%
-                        </div>
-                      </td>
-                      <td className="px-3 py-3 align-top sm:px-5 sm:py-4">
-                        <div className="text-sm font-semibold text-ink">{item.name}</div>
-                        <div className="mt-1 text-xs text-muted">Master qty: {item.quantity} KG</div>
-                      </td>
-                      <td className="px-3 py-3 align-top sm:px-5 sm:py-4">
-                        <div className="flex items-center gap-2">
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={kgValue}
-                            onChange={(e) =>
-                              setManualKgValues((current) => ({
-                                ...current,
-                                [item._id]: e.target.value
-                              }))
-                            }
-                            placeholder={suggestedKg.toString()}
-                          />
-                          <span className="shrink-0 text-xs font-semibold uppercase tracking-[0.16em] text-muted print:text-black">
-                            kg
-                          </span>
-                        </div>
-                        <p className="mt-2 text-xs text-muted">Suggested based on percentage: {suggestedKg.toLocaleString()} KG</p>
-                      </td>
-                      <td className="px-3 py-3 align-top sm:px-5 sm:py-4">
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={actualValue}
-                          onChange={(e) =>
-                            setActuals((current) => ({
-                              ...current,
-                              [item._id]: e.target.value
-                            }))
-                          }
-                          placeholder="Enter actuals"
-                        />
-                      </td>
-                      <td className="px-3 py-3 align-top sm:px-5 sm:py-4">
-                        <Input
-                          value={remarkValue}
-                          onChange={(e) =>
-                            setRemarks((current) => ({
-                              ...current,
-                              [item._id]: e.target.value
-                            }))
-                          }
-                          placeholder="Enter remarks"
-                        />
-                      </td>
-                      <td className="px-3 py-3 align-top sm:px-5 sm:py-4">
-                        <Input
-                          value={signatureValue}
-                          onChange={(e) =>
-                            setSignatures((current) => ({
-                              ...current,
-                              [item._id]: e.target.value
-                            }))
-                          }
-                          placeholder="Enter signature"
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              <tfoot className="bg-slate-50">
-                <tr>
-                  <td className="border-t border-line px-3 py-3 text-sm font-semibold text-ink sm:px-5 sm:py-4">TOTAL</td>
-                  <td className="border-t border-line px-3 py-3 text-sm text-muted sm:px-5 sm:py-4">Dynamic source list</td>
-                  <td className="border-t border-line px-3 py-3 text-sm font-semibold text-ink sm:px-5 sm:py-4">{distributedTotal.toLocaleString()} KG</td>
-                  <td className="border-t border-line px-3 py-3 text-sm text-muted sm:px-5 sm:py-4">Manual actuals only</td>
-                  <td className="border-t border-line px-3 py-3 text-sm text-muted sm:px-5 sm:py-4">Remarks</td>
-                  <td className="border-t border-line px-3 py-3 text-sm text-muted sm:px-5 sm:py-4">Signature</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </CardBody>
-      </Card>
+      <RawMaterialTable
+        actuals={actuals}
+        distributedTotal={distributedTotal}
+        items={items}
+        manualKgValues={manualKgValues}
+        onActualChange={handleActualChange}
+        onManualKgChange={handleManualKgChange}
+        onRemarkChange={handleRemarkChange}
+        onSignatureChange={handleSignatureChange}
+        onTargetKgChange={handleTargetKgChange}
+        remarks={remarks}
+        signatures={signatures}
+        targetKg={targetKg}
+      />
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div className="max-w-2xl">
-              <p className="text-lg font-semibold">Pack Size Calculator</p>
-              <p className="text-sm text-muted">Result = Pack Size x Quantity, with add and delete row support.</p>
-            </div>
-            <div className="flex flex-wrap gap-3 print:hidden">
-              <Button variant="secondary" onClick={() => setPackRows((current) => [...current, { packSize: "", quantity: "" }])}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Row
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardBody className="p-0">
-          <div className="overflow-x-auto">
-            <table className="min-w-[560px] sm:min-w-[760px] w-full border-collapse">
-              <thead className="bg-slate-50 text-left text-sm text-muted">
-                <tr>
-                  <th className="px-3 py-4 font-medium sm:px-5">Pack Size</th>
-                  <th className="px-3 py-4 font-medium sm:px-5">Quantity</th>
-                  <th className="px-3 py-4 font-medium sm:px-5">Result</th>
-                </tr>
-              </thead>
-              <tbody>
-                {packRows.map((row, index) => {
-                  const result = Number(row.packSize || 0) * Number(row.quantity || 0);
-                  return (
-                    <tr key={`${index}-${row.packSize}`} className="border-t border-line">
-                      <td className="px-3 py-3 sm:px-5 sm:py-4">
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={row.packSize}
-                          onChange={(e) =>
-                            setPackRows((current) =>
-                              current.map((packRow, rowIndex) => (rowIndex === index ? { ...packRow, packSize: e.target.value } : packRow))
-                            )
-                          }
-                          placeholder="5"
-                        />
-                      </td>
-                      <td className="px-3 py-3 sm:px-5 sm:py-4">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={row.quantity}
-                            onChange={(e) =>
-                              setPackRows((current) =>
-                              current.map((packRow, rowIndex) => (rowIndex === index ? { ...packRow, quantity: e.target.value } : packRow))
-                              )
-                            }
-                            placeholder="20"
-                          />
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setPackRows((current) => {
-                                const next = current.filter((_, rowIndex) => rowIndex !== index);
-                                return next.length > 0 ? next : [{ packSize: "", quantity: "" }];
-                              })
-                            }
-                            className="inline-flex h-11 w-full items-center justify-center rounded-2xl border border-line text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 sm:w-11"
-                            aria-label="Delete pack row"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
-                      <td className="px-3 py-3 sm:px-5 sm:py-4">
-                        <div className="flex h-11 items-center rounded-2xl border border-line bg-slate-50 px-4 text-sm font-semibold text-ink">
-                          {result.toLocaleString()}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              <tfoot className="border-t border-line bg-slate-50">
-                <tr>
-                  <td className="px-3 py-4 text-sm font-semibold text-ink sm:px-5">Grand Total</td>
-                  <td className="px-3 py-4 text-sm text-muted sm:px-5">Auto calculated</td>
-                  <td className="px-3 py-4 text-sm font-semibold text-ink sm:px-5">{packGrandTotal.toLocaleString()}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </CardBody>
-      </Card>
+      <PackSizeTable
+        onAddRow={handleAddPackRow}
+        onDeleteRow={handleDeletePackRow}
+        onPackSizeChange={handlePackSizeChange}
+        onQuantityChange={handlePackQuantityChange}
+        packGrandTotal={packGrandTotal}
+        packRows={packRows}
+      />
     </div>
   );
 }

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { BarChart3, Calculator, LogOut, Menu, ShieldCheck, X, Users } from "lucide-react";
+import { BarChart3, Calculator, ClipboardList, LogOut, Menu, ShieldCheck, X, Users } from "lucide-react";
 import { Button, cx } from "@/components/ui";
 
 type ShellProps = {
@@ -15,9 +15,13 @@ type ShellProps = {
 const navItems = {
   admin: [
     { href: "/admin", label: "Admin Dashboard", icon: ShieldCheck },
-    { href: "/user", label: "User View", icon: Users }
+    { href: "/user", label: "User View", icon: Users },
+    { href: "/tracking", label: "Tracking", icon: ClipboardList }
   ],
-  user: [{ href: "/user", label: "User Dashboard", icon: Users }]
+  user: [
+    { href: "/user", label: "User Dashboard", icon: Users },
+    { href: "/tracking", label: "Tracking", icon: ClipboardList }
+  ]
 } as const;
 
 export function AppShell({ role, children, email }: ShellProps) {

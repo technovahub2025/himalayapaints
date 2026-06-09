@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dbConnect } from "@/lib/db";
 import { getAuthFromRequest } from "@/lib/auth";
+import { isSameProductLabel } from "@/lib/product-label";
 import Item from "@/models/Item";
 import Table from "@/models/Table";
 
 function forbidden() {
   return NextResponse.json({ message: "Forbidden" }, { status: 403 });
 }
+
+const DUPLICATE_PRODUCT_MESSAGE = "A product with this name already exists. Please choose a different product name.";
 
 async function getTableSummaries() {
   const [tables, counts] = await Promise.all([
@@ -19,6 +22,16 @@ async function getTableSummaries() {
     name: table.name,
     count: countMap.get(table.name) ?? 0
   }));
+}
+
+async function hasProductNameConflict(candidateName: string, ignoreName?: string) {
+  const tables = await Table.find().select("name").lean();
+  return tables.some((table) => {
+    if (ignoreName && isSameProductLabel(table.name, ignoreName)) {
+      return false;
+    }
+    return isSameProductLabel(table.name, candidateName);
+  });
 }
 
 export async function GET(request: NextRequest) {
@@ -42,9 +55,8 @@ export async function POST(request: NextRequest) {
     }
 
     await dbConnect();
-    const existing = await Table.findOne({ name }).lean();
-    if (existing) {
-      return NextResponse.json({ message: "Table already exists" }, { status: 409 });
+    if (await hasProductNameConflict(name)) {
+      return NextResponse.json({ message: DUPLICATE_PRODUCT_MESSAGE }, { status: 409 });
     }
 
     const created = await Table.create({ name });
@@ -93,9 +105,8 @@ export async function PATCH(request: NextRequest) {
     const current = await Table.findOne({ name: fromName });
     if (!current) return NextResponse.json({ message: "Table not found" }, { status: 404 });
 
-    const duplicate = await Table.findOne({ name: toName }).lean();
-    if (duplicate) {
-      return NextResponse.json({ message: "Another table already uses that name" }, { status: 409 });
+    if (await hasProductNameConflict(toName, fromName)) {
+      return NextResponse.json({ message: DUPLICATE_PRODUCT_MESSAGE }, { status: 409 });
     }
 
     await Table.findByIdAndUpdate(current._id, { name: toName }, { new: true, runValidators: true });
