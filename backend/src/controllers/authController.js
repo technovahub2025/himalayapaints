@@ -40,6 +40,7 @@ export async function login(req, res) {
             maxAge: 60 * 60 * 24 * 7 * 1000
         });
         return res.json({
+            token,
             role: user.role,
             redirectTo: roleRedirectPath(user.role)
         });

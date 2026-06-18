@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowRight, Eye, EyeOff, LoaderCircle } from "lucide-react";
 import { Button, Card, CardBody, CardHeader, Input, Label, Subtitle, Title } from "@/components/ui";
 import { toast } from "sonner";
-import { apiFetch } from "@/services/api-client";
+import { apiFetch, setAuthToken } from "@/services/api-client";
 function roleRedirectPath(role) {
     return role === "admin" ? "/admin" : "/user";
 }
@@ -21,6 +21,9 @@ export function LoginPage() {
                 method: "POST",
                 json: { email, password }
             });
+            if (data.token) {
+                setAuthToken(data.token);
+            }
             toast.success("Welcome back");
             navigate(roleRedirectPath(data.role), { replace: true });
         }
