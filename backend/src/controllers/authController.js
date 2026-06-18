@@ -47,7 +47,9 @@ export async function login(req, res) {
     catch (error) {
         const message = error instanceof Error && /MONGODB_URI|connect|ECONNREFUSED|failed to connect/i.test(error.message)
             ? "Database connection failed. Make sure MongoDB is running and MONGODB_URI is correct."
-            : "Login failed";
+            : error instanceof Error && /JWT_SECRET/i.test(error.message)
+                ? "JWT_SECRET is missing in the backend environment."
+                : "Login failed";
         const status = message.startsWith("Database connection failed") ? 503 : 500;
         return res.status(status).json({ message });
     }
