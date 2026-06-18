@@ -9,7 +9,7 @@ import { getAuthFromRequest } from "../utils/request-auth.js";
 function cookieOptions() {
     return {
         httpOnly: true,
-        sameSite: "lax",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
         secure: process.env.NODE_ENV === "production",
         path: "/"
     };
