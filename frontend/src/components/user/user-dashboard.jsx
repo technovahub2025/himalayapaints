@@ -307,7 +307,7 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
         }
         setSavingProduction(true);
         try {
-            const response = await fetch("/api/production", {
+            const response = await fetch(apiUrl("/api/production"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({

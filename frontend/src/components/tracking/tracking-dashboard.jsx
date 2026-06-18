@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Eye, FileSpreadsheet, FileText } from "lucide-react";
 import { Button, Card, CardBody, CardHeader, Input, Subtitle, Title } from "@/components/ui";
 import { formatProductLabel } from "@/lib/product-label";
+import { apiUrl } from "@/services/api-client";
 import { toast } from "sonner";
 export function TrackingDashboard({ email, role }) {
     const [productionBatches, setProductionBatches] = useState([]);
@@ -16,7 +17,7 @@ export function TrackingDashboard({ email, role }) {
         async function loadData() {
             setLoading(true);
             try {
-                const productionResponse = await fetch("/api/production");
+                const productionResponse = await fetch(apiUrl("/api/production"));
                 const productionData = await productionResponse.json();
                 if (cancelled)
                     return;
