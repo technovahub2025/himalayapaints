@@ -15,6 +15,12 @@ export function apiUrl(path) {
     }
     return path;
 }
+export async function apiRequest(input, options = {}) {
+    return fetch(typeof input === "string" ? apiUrl(input) : input, {
+        ...options,
+        credentials: "include"
+    });
+}
 export async function apiFetch(input, options = {}) {
     const hasJsonBody = options.json !== undefined;
     const response = await fetch(typeof input === "string" ? apiUrl(input) : input, {
