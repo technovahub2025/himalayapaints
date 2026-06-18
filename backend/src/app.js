@@ -25,6 +25,9 @@ export function createApp() {
     app.use(cookieParser());
     app.use(express.json({ limit: "2mb" }));
     app.use(express.urlencoded({ extended: true }));
+    app.get("/", (_req, res) => {
+        res.json({ ok: true, message: "Himalaya Paints backend is running" });
+    });
     app.use("/api/auth", rateLimit({
         windowMs: 60 * 1000,
         max: 30
@@ -37,6 +40,9 @@ export function createApp() {
     app.use("/api/stock", stockRoutes);
     app.get("/health", (_req, res) => {
         res.json({ ok: true });
+    });
+    app.use((req, res) => {
+        res.status(404).json({ message: `Route not found: ${req.method} ${req.originalUrl}` });
     });
     app.use((error, _req, res, _next) => {
         console.error(error);
