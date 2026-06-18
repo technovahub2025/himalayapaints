@@ -233,7 +233,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
         updateAdminUrl(trimmed, activeSection);
         setLoading(true);
         try {
-            const response = await fetch(`/api/admin/items?tableName=${encodeURIComponent(trimmed)}`);
+            const response = await fetch(apiUrl(`/api/admin/items?tableName=${encodeURIComponent(trimmed)}`));
             const data = await response.json();
             if (!response.ok)
                 throw new Error(data.message || "Failed to load table");
@@ -287,7 +287,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
             setRawMaterialLoadingMore(true);
         }
         try {
-            const response = await fetch(`/api/admin/raw-materials?${params.toString()}`);
+            const response = await fetch(apiUrl(`/api/admin/raw-materials?${params.toString()}`));
             const data = await response.json();
             if (!response.ok)
                 throw new Error(data.message || "Failed to load raw materials");
@@ -335,11 +335,11 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
         if (!trimmedCode) {
             return null;
         }
-        const response = await fetch(`/api/admin/raw-materials?${new URLSearchParams({
+        const response = await fetch(apiUrl(`/api/admin/raw-materials?${new URLSearchParams({
             limit: "1",
             offset: "0",
             code: trimmedCode
-        }).toString()}`);
+        }).toString()}`));
         const data = await response.json();
         if (!response.ok) {
             throw new Error(data.message || "Failed to load raw materials");
@@ -356,11 +356,11 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
         }
         setRawMaterialLookupLoading(true);
         try {
-            const response = await fetch(`/api/admin/raw-materials?${new URLSearchParams({
+            const response = await fetch(apiUrl(`/api/admin/raw-materials?${new URLSearchParams({
                 limit: "10",
                 offset: "0",
                 search: trimmed
-            }).toString()}`);
+            }).toString()}`));
             const data = await response.json();
             if (!response.ok) {
                 throw new Error(data.message || "Failed to search raw materials");
@@ -386,7 +386,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
             if (trimmed.length >= 1) {
                 requestParams.set("search", trimmed);
             }
-            const response = await fetch(`/api/admin/raw-materials?${requestParams.toString()}`);
+            const response = await fetch(apiUrl(`/api/admin/raw-materials?${requestParams.toString()}`));
             const data = await response.json();
             if (!response.ok) {
                 throw new Error(data.message || "Failed to search raw materials");
@@ -425,7 +425,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
             if (trimmed.length >= 1) {
                 requestParams.set("search", trimmed);
             }
-            const response = await fetch(`/api/admin/raw-materials?${requestParams.toString()}`);
+            const response = await fetch(apiUrl(`/api/admin/raw-materials?${requestParams.toString()}`));
             const data = await response.json();
             if (!response.ok) {
                 throw new Error(data.message || "Failed to search raw materials");
@@ -713,10 +713,10 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
         const codes = new Set();
         let offset = 0;
         while (true) {
-            const response = await fetch(`/api/admin/raw-materials?${new URLSearchParams({
+            const response = await fetch(apiUrl(`/api/admin/raw-materials?${new URLSearchParams({
                 limit: "100",
                 offset: String(offset)
-            }).toString()}`);
+            }).toString()}`));
             const data = await response.json();
             if (!response.ok) {
                 throw new Error(data.message || "Failed to load raw materials");
@@ -1092,7 +1092,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
         try {
             const idsToDelete = selectedRows.map(({ row }) => row.id).filter(Boolean);
             if (idsToDelete.length > 0) {
-                await Promise.all(idsToDelete.map((id) => fetch(`/api/admin/items/${id}`, { method: "DELETE" })));
+                await Promise.all(idsToDelete.map((id) => fetch(apiUrl(`/api/admin/items/${id}`), { method: "DELETE" })));
             }
             const selectedKeySet = new Set(selectedProductRowKeys);
             const nextRows = rows.filter((row, index) => !selectedKeySet.has(getProductRowKey(row, index)));
@@ -1153,11 +1153,11 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
                 toast.error("Enter a raw material name first.");
                 return;
             }
-            const response = await fetch(`/api/admin/raw-materials?${new URLSearchParams({
+            const response = await fetch(apiUrl(`/api/admin/raw-materials?${new URLSearchParams({
                 limit: "10",
                 offset: "0",
                 search: name
-            }).toString()}`);
+            }).toString()}`));
             const data = await response.json();
             if (!response.ok) {
                 throw new Error(data.message || "Failed to load raw material");
@@ -1233,7 +1233,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
         if (row.id) {
             setLoading(true);
             try {
-                const response = await fetch(`/api/admin/items/${row.id}`, { method: "DELETE" });
+                const response = await fetch(apiUrl(`/api/admin/items/${row.id}`), { method: "DELETE" });
                 const data = await response.json();
                 if (!response.ok)
                     throw new Error(data.message || "Failed to delete row");
@@ -1272,7 +1272,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
         try {
             const payload = normalizeRow(row);
             const method = row.id ? "PATCH" : "POST";
-            const endpoint = row.id ? `/api/admin/items/${row.id}` : "/api/admin/items";
+            const endpoint = row.id ? apiUrl(`/api/admin/items/${row.id}`) : apiUrl("/api/admin/items");
             const response = await fetch(endpoint, {
                 method,
                 headers: { "Content-Type": "application/json" },

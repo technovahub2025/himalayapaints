@@ -11,6 +11,7 @@ import { ProductSelector } from "@/components/user/product-selector";
 import { RawMaterialTable } from "@/components/user/raw-material-table";
 import { PackSizeTable } from "@/components/user/pack-size-table";
 import { formatProductLabel } from "@/lib/product-label";
+import { apiUrl } from "@/services/api-client";
 import { toast } from "sonner";
 const EMPTY_BATCH_DETAILS = {
     product: "",
@@ -189,7 +190,7 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
         setLoading(true);
         try {
             navigate(`/user?tableName=${encodeURIComponent(trimmed)}`, { replace: true });
-            const response = await fetch(`/api/items?tableName=${encodeURIComponent(trimmed)}`);
+            const response = await fetch(apiUrl(`/api/items?tableName=${encodeURIComponent(trimmed)}`));
             const data = await response.json();
             if (!response.ok)
                 throw new Error(data.message || "Failed to load items");

@@ -5,9 +5,19 @@ function buildHeaders(headers, hasJsonBody) {
     }
     return nextHeaders;
 }
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+export function apiUrl(path) {
+    if (/^https?:\/\//i.test(path)) {
+        return path;
+    }
+    if (apiBaseUrl && path.startsWith("/api/")) {
+        return `${apiBaseUrl}${path}`;
+    }
+    return path;
+}
 export async function apiFetch(input, options = {}) {
     const hasJsonBody = options.json !== undefined;
-    const response = await fetch(input, {
+    const response = await fetch(typeof input === "string" ? apiUrl(input) : input, {
         ...options,
         headers: buildHeaders(options.headers, hasJsonBody),
         body: hasJsonBody ? JSON.stringify(options.json) : options.body,
