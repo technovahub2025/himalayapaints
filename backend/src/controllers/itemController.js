@@ -14,6 +14,15 @@ function escapeRegExp(value) {
 function normalizeCode(value) {
     return String(value ?? "").trim().toLowerCase();
 }
+function readQueryString(value, fallback = "") {
+    if (Array.isArray(value)) {
+        return String(value[0] ?? fallback).trim();
+    }
+    if (typeof value === "string") {
+        return value.trim();
+    }
+    return fallback;
+}
 async function getRawMaterialByCode(code) {
     const trimmed = String(code ?? "").trim();
     if (!trimmed) {
@@ -26,7 +35,7 @@ export async function getPublicItems(req, res) {
     if (!auth)
         return res.status(401).json({ message: "Unauthorized" });
     await dbConnect();
-    const tableName = req.query.tableName?.trim() || "Table 1";
+    const tableName = readQueryString(req.query.tableName, "Table 1") || "Table 1";
     const items = await Item.find({ tableName }).sort({ createdAt: 1 }).lean();
     const tables = await Table.find().sort({ createdAt: 1 }).lean();
     const tableNames = Array.from(new Set([tableName, ...tables.map((table) => table.name).filter(Boolean)])).sort();
@@ -37,7 +46,7 @@ export async function getAdminItems(req, res) {
     if (!auth || auth.role !== "admin")
         return forbidden(res);
     await dbConnect();
-    const tableName = req.query.tableName?.trim() || "Table 1";
+    const tableName = readQueryString(req.query.tableName, "Table 1") || "Table 1";
     const items = await Item.find({ tableName }).sort({ createdAt: 1 }).lean();
     const tables = await Table.find().sort({ createdAt: 1 }).lean();
     const tableNames = Array.from(new Set([tableName, ...tables.map((table) => table.name).filter(Boolean)])).sort();

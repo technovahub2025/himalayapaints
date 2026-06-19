@@ -60,9 +60,6 @@ export async function me(req, res) {
     return res.json({ user: auth });
 }
 export async function logout(_req, res) {
-    res.cookie("auth_token", "", {
-        ...cookieOptions(),
-        maxAge: 0
-    });
+    res.clearCookie("auth_token", cookieOptions());
     return res.json({ ok: true });
 }

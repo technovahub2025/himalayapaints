@@ -4,6 +4,8 @@ import { BrowserRouter } from "react-router-dom";
 import { Toaster } from "sonner";
 import { App } from "@/App";
 import "@/styles/globals.css";
+import { installApiFetchProxy } from "@/services/api-client";
+installApiFetchProxy();
 ReactDOM.createRoot(document.getElementById("root")).render(<React.StrictMode>
     <BrowserRouter>
       <App />

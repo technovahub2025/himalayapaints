@@ -2,8 +2,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileSpreadsheet, FileText, LoaderCircle, Printer, RefreshCw, Save } from "lucide-react";
-import { jsPDF } from "jspdf";
-import * as XLSX from "xlsx-js-style";
 import { calculateGrandTotal, safePercent, scaleQuantity } from "@/lib/calculations";
 import { Button, Card, CardBody, CardHeader, Input, Subtitle, Title } from "@/components/ui";
 import { SummaryCards } from "@/components/summary-cards";
@@ -334,6 +332,7 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
         }
     }
     async function exportExcel() {
+        const XLSX = await import("xlsx-js-style");
         const worksheetData = [
             ["PRODUCTION BATCH SHEET"],
             ["PRODUCT:", formatProductLabel(tableName || "Product 1"), "", "BATCH SIZE", "SPECIFIC GRAVITY", "VISCOSITY"],
@@ -484,7 +483,8 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
         XLSX.utils.book_append_sheet(workbook, worksheet, "User Table");
         XLSX.writeFile(workbook, `${tableName || "table"}-production-sheet.xlsx`);
     }
-    function createPdfDocument() {
+    async function createPdfDocument() {
+        const { jsPDF } = await import("jspdf");
         const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
         const pageWidth = 297;
         const marginX = 5;
@@ -612,11 +612,11 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
         return doc;
     }
     async function exportPdf() {
-        const doc = createPdfDocument();
+        const doc = await createPdfDocument();
         doc.save(`${tableName || "table"}-production-sheet.pdf`);
     }
-    function handlePrint() {
-        const doc = createPdfDocument();
+    async function handlePrint() {
+        const doc = await createPdfDocument();
         doc.autoPrint();
         const blobUrl = URL.createObjectURL(doc.output("blob"));
         const iframe = document.createElement("iframe");

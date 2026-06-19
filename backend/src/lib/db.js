@@ -9,7 +9,12 @@ export async function dbConnect() {
         throw new Error("Please define the MONGODB_URI environment variable.");
     }
     if (!cached.promise) {
-        cached.promise = mongoose.connect(MONGODB_URI).then((instance) => instance);
+        cached.promise = mongoose.connect(MONGODB_URI, {
+            serverSelectionTimeoutMS: 10000
+        }).then((instance) => instance).catch((error) => {
+            cached.promise = null;
+            throw error;
+        });
     }
     cached.conn = await cached.promise;
     return cached.conn;
