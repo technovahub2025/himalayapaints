@@ -21,7 +21,7 @@ export function RootEntry({ destination, heading, subtitle, ctaLabel, autoRedire
             <Subtitle className="mt-0 text-base">{subtitle}</Subtitle>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Link href={destination} className={cx("inline-flex w-full items-center justify-center rounded-2xl bg-accent px-4 py-2.5 text-sm font-medium text-white transition hover:bg-teal-700 sm:w-auto")}>
+            <Link to={destination} className={cx("inline-flex w-full items-center justify-center rounded-2xl bg-accent px-4 py-2.5 text-sm font-medium text-white transition hover:bg-teal-700 sm:w-auto")}>
               <ArrowRight className="mr-2 h-4 w-4"/>
               {ctaLabel}
             </Link>

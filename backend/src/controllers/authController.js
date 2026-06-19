@@ -7,10 +7,11 @@ import { signToken } from "../lib/auth.js";
 import { roleRedirectPath } from "../lib/routes.js";
 import { getAuthFromRequest } from "../utils/request-auth.js";
 function cookieOptions() {
+    const isProduction = process.env.NODE_ENV === "production";
     return {
         httpOnly: true,
-        sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
+        sameSite: isProduction ? "none" : "lax",
+        secure: isProduction,
         path: "/"
     };
 }
