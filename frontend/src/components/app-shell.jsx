@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { BarChart3, Calculator, ClipboardList, LogOut, Menu, ShieldCheck, X, Users } from "lucide-react";
 import { Button, cx } from "@/components/ui";
-import { apiFetch, clearAuthToken } from "@/services/api-client";
+import { apiFetch } from "@/services/api-client";
 const navItems = {
     admin: [
         { href: "/admin", label: "Admin Dashboard", icon: ShieldCheck },
@@ -24,7 +24,6 @@ export function AppShell({ role, children, email }) {
     }, [location.pathname]);
     async function handleLogout() {
         await apiFetch("/api/auth/logout", { method: "POST" });
-        clearAuthToken();
         navigate("/login", { replace: true });
     }
     return (<div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(15,118,110,0.16),_transparent_28%),linear-gradient(180deg,#f8f4ec_0%,#f3efe6_100%)] text-ink">

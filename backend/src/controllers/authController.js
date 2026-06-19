@@ -9,7 +9,7 @@ import { getAuthFromRequest } from "../utils/request-auth.js";
 function cookieOptions() {
     return {
         httpOnly: true,
-        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+        sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
         path: "/"
     };
@@ -40,7 +40,6 @@ export async function login(req, res) {
             maxAge: 60 * 60 * 24 * 7 * 1000
         });
         return res.json({
-            token,
             role: user.role,
             redirectTo: roleRedirectPath(user.role)
         });
@@ -48,9 +47,7 @@ export async function login(req, res) {
     catch (error) {
         const message = error instanceof Error && /MONGODB_URI|connect|ECONNREFUSED|failed to connect/i.test(error.message)
             ? "Database connection failed. Make sure MongoDB is running and MONGODB_URI is correct."
-            : error instanceof Error && /JWT_SECRET/i.test(error.message)
-                ? "JWT_SECRET is missing in the backend environment."
-                : "Login failed";
+            : "Login failed";
         const status = message.startsWith("Database connection failed") ? 503 : 500;
         return res.status(status).json({ message });
     }

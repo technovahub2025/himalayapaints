@@ -6,7 +6,6 @@ import { calculateAmount, calculateGrandTotal } from "@/lib/calculations";
 import { formatProductLabel, isSameProductLabel, normalizeProductLabel } from "@/lib/product-label";
 import { generateRawMaterialCode } from "@/lib/raw-materials";
 import { Button, Card, CardBody, CardHeader, Input, Title } from "@/components/ui";
-import { apiRequest, apiUrl } from "@/services/api-client";
 import { toast } from "sonner";
 const DUPLICATE_PRODUCT_MESSAGE = "A product with this name already exists. Please choose a different product name.";
 let productRowKeyCounter = 0;
@@ -139,7 +138,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
     useEffect(() => {
         async function loadTables() {
             try {
-                const response = await apiRequest("/api/admin/tables");
+                const response = await fetch("/api/admin/tables");
                 const data = await response.json();
                 if (!response.ok)
                     throw new Error(data.message || "Failed to load tables");
@@ -234,7 +233,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
         updateAdminUrl(trimmed, activeSection);
         setLoading(true);
         try {
-            const response = await apiRequest(`/api/admin/items?tableName=${encodeURIComponent(trimmed)}`);
+            const response = await fetch(`/api/admin/items?tableName=${encodeURIComponent(trimmed)}`);
             const data = await response.json();
             if (!response.ok)
                 throw new Error(data.message || "Failed to load table");
@@ -257,7 +256,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
     }
     async function refreshTableList(nextActiveTable = tableName) {
         try {
-            const response = await apiRequest("/api/admin/tables");
+            const response = await fetch("/api/admin/tables");
             const data = await response.json();
             if (!response.ok)
                 throw new Error(data.message || "Failed to load tables");
@@ -288,7 +287,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
             setRawMaterialLoadingMore(true);
         }
         try {
-            const response = await apiRequest(`/api/admin/raw-materials?${params.toString()}`);
+            const response = await fetch(`/api/admin/raw-materials?${params.toString()}`);
             const data = await response.json();
             if (!response.ok)
                 throw new Error(data.message || "Failed to load raw materials");
@@ -336,7 +335,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
         if (!trimmedCode) {
             return null;
         }
-        const response = await apiRequest(`/api/admin/raw-materials?${new URLSearchParams({
+        const response = await fetch(`/api/admin/raw-materials?${new URLSearchParams({
             limit: "1",
             offset: "0",
             code: trimmedCode
@@ -357,7 +356,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
         }
         setRawMaterialLookupLoading(true);
         try {
-            const response = await apiRequest(`/api/admin/raw-materials?${new URLSearchParams({
+            const response = await fetch(`/api/admin/raw-materials?${new URLSearchParams({
                 limit: "10",
                 offset: "0",
                 search: trimmed
@@ -387,7 +386,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
             if (trimmed.length >= 1) {
                 requestParams.set("search", trimmed);
             }
-            const response = await apiRequest(`/api/admin/raw-materials?${requestParams.toString()}`);
+            const response = await fetch(`/api/admin/raw-materials?${requestParams.toString()}`);
             const data = await response.json();
             if (!response.ok) {
                 throw new Error(data.message || "Failed to search raw materials");
@@ -426,7 +425,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
             if (trimmed.length >= 1) {
                 requestParams.set("search", trimmed);
             }
-            const response = await apiRequest(`/api/admin/raw-materials?${requestParams.toString()}`);
+            const response = await fetch(`/api/admin/raw-materials?${requestParams.toString()}`);
             const data = await response.json();
             if (!response.ok) {
                 throw new Error(data.message || "Failed to search raw materials");
@@ -661,7 +660,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
         }
         setLoading(true);
         try {
-            const response = await apiRequest("/api/admin/raw-materials", {
+            const response = await fetch("/api/admin/raw-materials", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ code, name, rate: rateValue })
@@ -714,7 +713,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
         const codes = new Set();
         let offset = 0;
         while (true) {
-            const response = await apiRequest(`/api/admin/raw-materials?${new URLSearchParams({
+            const response = await fetch(`/api/admin/raw-materials?${new URLSearchParams({
                 limit: "100",
                 offset: String(offset)
             }).toString()}`);
@@ -840,7 +839,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
         }
         setRawMaterialImportLoading(true);
         try {
-            const response = await apiRequest("/api/admin/raw-materials/import", {
+            const response = await fetch("/api/admin/raw-materials/import", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ materials: validRows })
@@ -903,7 +902,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
         }
         setLoading(true);
         try {
-            const response = await apiRequest("/api/admin/tables", {
+            const response = await fetch("/api/admin/tables", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ name: trimmed })
@@ -927,7 +926,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
         const trimmed = getDuplicateTableName(sourceName);
         setLoading(true);
         try {
-            const response = await apiRequest("/api/admin/tables", {
+            const response = await fetch("/api/admin/tables", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ name: trimmed, duplicateFrom: sourceName })
@@ -963,7 +962,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
         }
         setLoading(true);
         try {
-            const response = await apiRequest("/api/admin/tables", {
+            const response = await fetch("/api/admin/tables", {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ fromName, toName })
@@ -999,7 +998,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
             return;
         setLoading(true);
         try {
-            const response = await apiRequest("/api/admin/tables", {
+            const response = await fetch("/api/admin/tables", {
                 method: "DELETE",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ name })
@@ -1093,7 +1092,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
         try {
             const idsToDelete = selectedRows.map(({ row }) => row.id).filter(Boolean);
             if (idsToDelete.length > 0) {
-                await Promise.all(idsToDelete.map((id) => apiRequest(`/api/admin/items/${id}`, { method: "DELETE" })));
+                await Promise.all(idsToDelete.map((id) => fetch(`/api/admin/items/${id}`, { method: "DELETE" })));
             }
             const selectedKeySet = new Set(selectedProductRowKeys);
             const nextRows = rows.filter((row, index) => !selectedKeySet.has(getProductRowKey(row, index)));
@@ -1154,7 +1153,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
                 toast.error("Enter a raw material name first.");
                 return;
             }
-            const response = await apiRequest(`/api/admin/raw-materials?${new URLSearchParams({
+            const response = await fetch(`/api/admin/raw-materials?${new URLSearchParams({
                 limit: "10",
                 offset: "0",
                 search: name
@@ -1234,7 +1233,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
         if (row.id) {
             setLoading(true);
             try {
-                const response = await apiRequest(`/api/admin/items/${row.id}`, { method: "DELETE" });
+                const response = await fetch(`/api/admin/items/${row.id}`, { method: "DELETE" });
                 const data = await response.json();
                 if (!response.ok)
                     throw new Error(data.message || "Failed to delete row");
@@ -1273,8 +1272,8 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
         try {
             const payload = normalizeRow(row);
             const method = row.id ? "PATCH" : "POST";
-            const endpoint = row.id ? apiUrl(`/api/admin/items/${row.id}`) : apiUrl("/api/admin/items");
-            const response = await apiRequest(endpoint, {
+            const endpoint = row.id ? `/api/admin/items/${row.id}` : "/api/admin/items";
+            const response = await fetch(endpoint, {
                 method,
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ ...payload, tableName })
@@ -1334,7 +1333,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
         const payload = rowsToSave.map(normalizeRow);
         setLoading(true);
         try {
-            const response = await apiRequest("/api/admin/items", {
+            const response = await fetch("/api/admin/items", {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ tableName, items: payload })
@@ -1380,7 +1379,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
         }
         setRawMaterialSaving((current) => ({ ...current, [code]: true }));
         try {
-            const response = await apiRequest("/api/admin/raw-materials", {
+            const response = await fetch("/api/admin/raw-materials", {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ code, rate: Number(nextRate) })
@@ -1618,7 +1617,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
         }
         setLoading(true);
         try {
-            const response = await apiRequest("/api/admin/raw-materials", {
+            const response = await fetch("/api/admin/raw-materials", {
                 method: "DELETE",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ codes: selectedRawMaterialCodes })
