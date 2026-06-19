@@ -340,7 +340,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
             limit: "1",
             offset: "0",
             code: trimmedCode
-        }).toString()}`));
+        }).toString()}`);
         const data = await response.json();
         if (!response.ok) {
             throw new Error(data.message || "Failed to load raw materials");
@@ -361,7 +361,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
                 limit: "10",
                 offset: "0",
                 search: trimmed
-            }).toString()}`));
+            }).toString()}`);
             const data = await response.json();
             if (!response.ok) {
                 throw new Error(data.message || "Failed to search raw materials");
@@ -717,7 +717,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
             const response = await apiRequest(`/api/admin/raw-materials?${new URLSearchParams({
                 limit: "100",
                 offset: String(offset)
-            }).toString()}`));
+            }).toString()}`);
             const data = await response.json();
             if (!response.ok) {
                 throw new Error(data.message || "Failed to load raw materials");
@@ -1158,7 +1158,7 @@ export function AdminDashboard({ initialItems, initialSection = "products", init
                 limit: "10",
                 offset: "0",
                 search: name
-            }).toString()}`));
+            }).toString()}`);
             const data = await response.json();
             if (!response.ok) {
                 throw new Error(data.message || "Failed to load raw material");
