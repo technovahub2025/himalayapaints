@@ -7,12 +7,9 @@ export function RawMaterialTable({ actuals, distributedTotal, items, manualKgVal
     return (<Card>
       <CardHeader>
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div className="max-w-2xl">
-            <p className="text-lg font-semibold tracking-wide">PRODUCTION RATIO TABLE</p>
-            <p className="text-sm text-muted">
-              Each admin item uses 100 KG as the base production. Enter a batch KG to scale the editable KG values instantly.
-            </p>
-          </div>
+           <div className="max-w-2xl">
+             <p className="text-lg font-semibold tracking-wide">PRODUCTION RATIO TABLE</p>
+           </div>
           <div className="grid w-full gap-3 md:max-w-sm">
             <label className="text-sm font-medium text-ink">Target Production KG</label>
             <Input type="number" min="0" step="0.01" value={targetKg} onChange={(e) => onTargetKgChange(e.target.value)}/>

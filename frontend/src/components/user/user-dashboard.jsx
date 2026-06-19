@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FileSpreadsheet, FileText, LoaderCircle, Printer, RefreshCw, Save } from "lucide-react";
+import { FileSpreadsheet, FileText, LoaderCircle, Printer, RefreshCw, Save, ChevronDown, Download } from "lucide-react";
 import { calculateGrandTotal, safePercent, scaleQuantity } from "@/lib/calculations";
 import { Button, Card, CardBody, CardHeader, Input, Subtitle, Title } from "@/components/ui";
 import { SummaryCards } from "@/components/summary-cards";
@@ -21,16 +21,18 @@ const EMPTY_BATCH_DETAILS = {
 const EMPTY_PACK_ROWS = [{ packSize: "", quantity: "" }];
 const USER_DRAFT_PREFIX = "himalayapaints:user-dashboard-draft:";
 export function UserDashboard({ initialItems, initialTableName, tableNames, email }) {
-    const navigate = useNavigate();
-    const [tableName, setTableName] = useState(initialTableName);
-    const [items, setItems] = useState(initialItems);
-    const [availableTables, setAvailableTables] = useState(Array.from(new Set([initialTableName, ...tableNames.filter(Boolean)])).sort());
-    const [targetKg, setTargetKg] = useState("100");
-    const [manualKgValues, setManualKgValues] = useState({});
-    const [actuals, setActuals] = useState({});
-    const [remarks, setRemarks] = useState({});
-    const [signatures, setSignatures] = useState({});
-    const [packRows, setPackRows] = useState(EMPTY_PACK_ROWS);
+     const navigate = useNavigate();
+     const [tableName, setTableName] = useState(initialTableName);
+     const [items, setItems] = useState(initialItems);
+     const [availableTables, setAvailableTables] = useState(Array.from(new Set([initialTableName, ...tableNames.filter(Boolean)])).sort());
+     const [targetKg, setTargetKg] = useState("100");
+     const [manualKgValues, setManualKgValues] = useState({});
+     const [actuals, setActuals] = useState({});
+     const [remarks, setRemarks] = useState({});
+     const [signatures, setSignatures] = useState({});
+     const [exportOpen, setExportOpen] = useState(false);
+     const exportMenuRef = useRef(null);
+     const [packRows, setPackRows] = useState(EMPTY_PACK_ROWS);
     const [batchDetails, setBatchDetails] = useState(EMPTY_BATCH_DETAILS);
     const [loading, setLoading] = useState(false);
     const [savingProduction, setSavingProduction] = useState(false);
@@ -651,19 +653,38 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
               <Button variant="secondary" onClick={saveProductionBatch} disabled={savingProduction || loading} className="w-full sm:w-auto">
                 {savingProduction ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
                 Save Production
-              </Button>
-              <Button variant="secondary" onClick={exportExcel} className="w-full sm:w-auto">
-                <FileSpreadsheet className="mr-2 h-4 w-4"/>
-                Export Excel
-              </Button>
-              <Button variant="secondary" onClick={exportPdf} className="w-full sm:w-auto">
-                <FileText className="mr-2 h-4 w-4"/>
-                Export PDF
-              </Button>
-              <Button variant="secondary" onClick={handlePrint} className="w-full sm:w-auto">
-                <Printer className="mr-2 h-4 w-4"/>
-                Print
-              </Button>
+               </Button>
+               <div ref={exportMenuRef} className="relative flex flex-col items-start">
+                 <Button variant="secondary" onClick={() => setExportOpen(!exportOpen)} className="w-full sm:w-auto">
+                   <Download className="mr-2 h-4 w-4"/>
+                   Export
+                   <ChevronDown className="ml-2 h-4 w-4"/>
+                 </Button>
+                 <div className="absolute left-0 top-full mt-1 text-xs text-muted whitespace-nowrap">Excel, PDF, Print</div>
+                  {exportOpen ? (<div className="absolute left-0 top-full z-20 mt-2 w-48 overflow-hidden rounded-2xl border border-line bg-white p-2 shadow-xl">
+                     <button type="button" className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm text-ink transition hover:bg-slate-50" onClick={async () => {
+                       setExportOpen(false);
+                       await exportExcel();
+                     }}>
+                       <FileSpreadsheet className="mr-2 h-4 w-4"/>
+                       Export Excel
+                     </button>
+                     <button type="button" className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm text-ink transition hover:bg-slate-50" onClick={async () => {
+                       setExportOpen(false);
+                       await exportPdf();
+                     }}>
+                       <FileText className="mr-2 h-4 w-4"/>
+                       Export PDF
+                     </button>
+                     <button type="button" className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm text-ink transition hover:bg-slate-50" onClick={() => {
+                       setExportOpen(false);
+                       handlePrint();
+                     }}>
+                       <Printer className="mr-2 h-4 w-4"/>
+                       Print
+                     </button>
+                   </div>) : null}
+               </div>
               <Button variant="secondary" onClick={clearCurrentDraft} className="w-full sm:w-auto">
                 Clear Draft
               </Button>
@@ -687,7 +708,7 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
         <CardHeader>
           <div className="flex flex-col gap-2">
             <p className="text-lg font-semibold">Batch Details</p>
-            <p className="text-sm text-muted">Enter production metadata here before exporting or printing.</p>
+
           </div>
         </CardHeader>
         <CardBody>

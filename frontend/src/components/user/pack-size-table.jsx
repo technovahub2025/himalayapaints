@@ -7,7 +7,7 @@ export function PackSizeTable({ onAddRow, onDeleteRow, onPackSizeChange, onQuant
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div className="max-w-2xl">
             <p className="text-lg font-semibold">Pack Size Calculator</p>
-            <p className="text-sm text-muted">Result = Pack Size x Quantity, with add and delete row support.</p>
+
           </div>
           <div className="flex flex-wrap gap-3 print:hidden">
             <Button variant="secondary" onClick={onAddRow}>
