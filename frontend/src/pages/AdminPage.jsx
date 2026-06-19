@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { AppShell } from "@/components/app-shell";
+import { LoadingScreen } from "@/components/loading-screen";
 import { AdminDashboard } from "@/components/admin/admin-dashboard";
+import { getCachedTableData, setCachedTableData } from "@/lib/dashboard-cache";
 import { useAuthSession } from "@/hooks/use-auth-session";
 import { apiFetch } from "@/services/api-client";
 function getTableName(search) {
@@ -22,6 +24,14 @@ export function AdminPage() {
     const [pageLoading, setPageLoading] = useState(true);
     const selectedTableName = useMemo(() => getTableName(location.search) || "Table 1", [location.search]);
     const selectedSection = useMemo(() => getSection(location.search), [location.search]);
+    const cachedData = getCachedTableData(selectedTableName);
+    useEffect(() => {
+        if (cachedData) {
+            setInitialItems(cachedData.items ?? []);
+            setTableNames(cachedData.tables ?? []);
+            setPageLoading(false);
+        }
+    }, [cachedData]);
     useEffect(() => {
         if (!loading && (!user || user.role !== "admin")) {
             navigate("/login", { replace: true });
@@ -40,13 +50,16 @@ export function AdminPage() {
                 ]);
                 if (cancelled)
                     return;
-                setInitialItems((itemsData.items ?? []).map((item) => ({ ...item })));
-                setTableNames(Array.isArray(tablesData.tables)
+                const nextItems = (itemsData.items ?? []).map((item) => ({ ...item }));
+                const nextTables = Array.isArray(tablesData.tables)
                     ? tablesData.tables.map((table) => table.name).filter(Boolean)
-                    : []);
+                    : [];
+                setInitialItems(nextItems);
+                setTableNames(nextTables);
+                setCachedTableData(selectedTableName, { items: nextItems, tables: nextTables });
             }
             catch {
-                if (!cancelled) {
+                if (!cancelled && !cachedData) {
                     setInitialItems([]);
                     setTableNames([]);
                 }
@@ -62,13 +75,13 @@ export function AdminPage() {
             cancelled = true;
         };
     }, [loading, selectedTableName, user]);
-    if (loading || pageLoading) {
-        return null;
+    if (loading || (pageLoading && initialItems.length === 0)) {
+        return <LoadingScreen title="Loading admin dashboard" subtitle="Fetching your data and permissions..."/>;
     }
     if (!user || user.role !== "admin") {
-        return null;
+        return <LoadingScreen title="Redirecting" subtitle="You do not have access to this page."/>;
     }
-    return (<AppShell role="admin" email={user.email}>
+    return (<AppShell role="admin" email={user.email} tableName={selectedTableName}>
       <AdminDashboard initialItems={initialItems} initialSection={selectedSection} initialTableName={selectedTableName} tableNames={tableNames}/>
     </AppShell>);
 }

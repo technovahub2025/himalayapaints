@@ -15,7 +15,7 @@ const navItems = {
         { href: "/tracking", label: "Tracking", icon: ClipboardList }
     ]
 };
-export function AppShell({ role, children, email }) {
+export function AppShell({ role, children, email, tableName }) {
     const location = useLocation();
     const navigate = useNavigate();
     const [open, setOpen] = useState(false);
@@ -25,6 +25,14 @@ export function AppShell({ role, children, email }) {
     async function handleLogout() {
         await apiFetch("/api/auth/logout", { method: "POST" });
         navigate("/login", { replace: true });
+    }
+    function buildHref(href) {
+        if (!tableName) {
+            return href;
+        }
+        const params = new URLSearchParams();
+        params.set("tableName", tableName);
+        return `${href}?${params.toString()}`;
     }
     return (<div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(15,118,110,0.16),_transparent_28%),linear-gradient(180deg,#f8f4ec_0%,#f3efe6_100%)] text-ink">
       <div className="mx-auto flex min-h-screen max-w-[1600px] flex-col lg:flex-row">
@@ -67,7 +75,7 @@ export function AppShell({ role, children, email }) {
             {navItems[role].map((item) => {
             const Icon = item.icon;
             const active = location.pathname === item.href;
-            return (<Link key={item.href} to={item.href} className={cx("flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition", active ? "bg-accent text-white shadow-soft" : "bg-transparent text-ink hover:bg-slate-100")}>
+            return (<Link key={item.href} to={buildHref(item.href)} className={cx("flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition", active ? "bg-accent text-white shadow-soft" : "bg-transparent text-ink hover:bg-slate-100")}>
                   <Icon className="h-4 w-4"/>
                   {item.label}
                 </Link>);
