@@ -341,8 +341,8 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
         const worksheetData = [
             ["PRODUCTION BATCH SHEET"],
             ["PRODUCT:", formatProductLabel(tableName || "Product 1"), "", "BATCH SIZE", "SPECIFIC GRAVITY", "VISCOSITY", ""],
-            ["BATCH NO", batchDetails.batchNo || "", "STD:", targetKg ? `${Number(targetKg).toLocaleString()} KG` : "", batchDetails.specificGravity || "", formatSecondsValue(batchDetails.viscosity), batchDetails.actuals || ""],
-            ["DATE", batchDetails.date || "", "ACTUAL:", "", "", "", ""],
+            ["BATCH NO", batchDetails.batchNo || "", "STD:", targetKg ? `${Number(targetKg).toLocaleString()} KG` : "", batchDetails.specificGravity || "", formatSecondsValue(batchDetails.viscosity), ""],
+            ["DATE", batchDetails.date || "", "ACTUAL:", "", batchDetails.actuals || "", "", ""],
             [],
             ["%", "RAW MATERIAL CODE", "STD QTY", "ACTUAL QTY", "REMARKS", "SIGNATURE"],
             ...exportTableRows.map((row) => [row.percentage, row.source, row.stdQty, row.actualQty, row.remarks, row.signature]),
