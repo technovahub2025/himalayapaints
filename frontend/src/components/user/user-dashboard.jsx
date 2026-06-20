@@ -355,7 +355,7 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
             ["TOTAL", "Dynamic source list", `${distributedTotal.toLocaleString()} KG`, "Manual actuals only", "Remarks", "Signature"]
         ];
         if (hasPackData) {
-            worksheetData.push([], ["PACK SIZE", "QTY", "TOTAL"], ...exportPackRows.map((row) => [row.packSize, row.quantity, String(row.result)]), ["BULK", "", "TOTAL"]);
+            worksheetData.push([], ["PACK SIZE", "QTY", "TOTAL"], ...exportPackRows.map((row) => [row.packSize, row.quantity, String(row.result)]), ["BULK", "", String(packGrandTotal)]);
         }
         const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
         const border = {
@@ -615,7 +615,7 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
                 textColor: [220, 38, 38]
             });
             drawCell(xPositions[1], y, colWidths[1], rowHeight, "", { align: "center" });
-            drawCell(xPositions[2], y, colWidths[2], rowHeight, "TOTAL", {
+            drawCell(xPositions[2], y, colWidths[2], rowHeight, String(packGrandTotal), {
                 bold: true,
                 textColor: [220, 38, 38]
             });

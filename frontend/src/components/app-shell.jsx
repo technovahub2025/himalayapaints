@@ -8,11 +8,11 @@ const navItems = {
     admin: [
         { href: "/admin", label: "Admin Dashboard", icon: ShieldCheck },
         { href: "/user", label: "User View", icon: Users },
-        { href: "/tracking", label: "Tracking", icon: ClipboardList }
+        { href: "/tracking", label: "Production History", icon: ClipboardList }
     ],
     user: [
         { href: "/user", label: "User Dashboard", icon: Users },
-        { href: "/tracking", label: "Tracking", icon: ClipboardList }
+        { href: "/tracking", label: "Production History", icon: ClipboardList }
     ]
 };
 export function AppShell({ role, children, email, tableName }) {
