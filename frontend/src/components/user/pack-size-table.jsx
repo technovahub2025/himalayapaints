@@ -3,6 +3,14 @@ import { Plus, Trash2 } from "lucide-react";
 import { Button, Input } from "@/components/ui";
 export function PackSizeTable({ onAddRow, onDeleteRow, onPackSizeChange, onQuantityChange, packGrandTotal, packRows }) {
     const hasRows = packRows.length > 0;
+    function handleEnterKey(rowIndex, row) {
+        const isLastRow = rowIndex === packRows.length - 1;
+        const hasContent = row.packSize.trim() !== "" || row.quantity.trim() !== "";
+        if (!isLastRow || !hasContent) {
+            return;
+        }
+        onAddRow();
+    }
     return (<div className="rounded-xl border border-[#E5E7EB] bg-white shadow-sm" style={{ padding: "24px" }}>
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
         <h3 className="text-[18px] font-semibold text-slate-900">Pack Size Calculator</h3>
@@ -33,10 +41,20 @@ export function PackSizeTable({ onAddRow, onDeleteRow, onPackSizeChange, onQuant
               const result = Number(row.packSize || 0) * Number(row.quantity || 0);
               return (<tr key={`${index}-${row.packSize}`}>
                       <td className="px-6 py-6 align-middle">
-                        <Input type="number" min="0" step="0.01" value={row.packSize} onChange={(e) => onPackSizeChange(index, e.target.value)} placeholder="0" className="h-11 w-full rounded-xl border-[#E5E7EB] bg-white px-3 text-sm placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"/>
+                        <Input type="number" min="0" step="0.01" value={row.packSize} onChange={(e) => onPackSizeChange(index, e.target.value)} onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleEnterKey(index, row);
+                        }
+                    }} placeholder="0" className="h-11 w-full rounded-xl border-[#E5E7EB] bg-white px-3 text-sm placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"/>
                       </td>
                       <td className="px-6 py-6 align-middle">
-                        <Input type="number" min="0" step="0.01" value={row.quantity} onChange={(e) => onQuantityChange(index, e.target.value)} placeholder="0" className="h-11 w-full rounded-xl border-[#E5E7EB] bg-white px-3 text-sm placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"/>
+                        <Input type="number" min="0" step="0.01" value={row.quantity} onChange={(e) => onQuantityChange(index, e.target.value)} onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleEnterKey(index, row);
+                        }
+                    }} placeholder="0" className="h-11 w-full rounded-xl border-[#E5E7EB] bg-white px-3 text-sm placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"/>
                       </td>
                       <td className="px-6 py-6 align-middle">
                         <div className="h-11 flex items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700">{result.toLocaleString()}</div>

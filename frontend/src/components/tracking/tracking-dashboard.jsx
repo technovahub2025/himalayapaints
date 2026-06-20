@@ -506,10 +506,9 @@ export function TrackingDashboard({ email, role }) {
       <div ref={batchDetailsRef}>
         <Card>
         <CardHeader>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="text-lg font-semibold">Batch Details</p>
-              <p className="text-sm text-muted">View the selected batch here and export it without leaving this page.</p>
+              <p className="text-lg font-semibold tracking-tight">Batch Details</p>
             </div>
             {selectedBatch ? (<div className="flex flex-wrap gap-2">
                 <Button variant="secondary" onClick={() => exportBatchExcel(selectedBatch)}>
@@ -523,100 +522,100 @@ export function TrackingDashboard({ email, role }) {
               </div>) : null}
           </div>
         </CardHeader>
-        <CardBody>
+        <CardBody className="p-5 sm:p-6">
           {selectedBatch ? (<div className="space-y-5">
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                <div className="rounded-2xl border border-line bg-slate-50/70 p-4">
-                  <p className="text-xs font-semibold tracking-[0.18em] text-muted">PRODUCT</p>
-                  <p className="mt-2 text-sm font-semibold text-ink">{formatProductLabel(selectedBatch.productName)}</p>
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-2xl border border-line/80 bg-white px-4 py-3 shadow-[0_1px_0_rgba(15,23,42,0.02)]">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Product</p>
+                  <p className="mt-1.5 text-sm font-semibold text-ink">{formatProductLabel(selectedBatch.productName)}</p>
                 </div>
-                <div className="rounded-2xl border border-line bg-slate-50/70 p-4">
-                  <p className="text-xs font-semibold tracking-[0.18em] text-muted">BATCH NO</p>
-                  <p className="mt-2 text-sm font-semibold text-ink">{selectedBatch.batchNo || "-"}</p>
+                <div className="rounded-2xl border border-line/80 bg-white px-4 py-3 shadow-[0_1px_0_rgba(15,23,42,0.02)]">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Batch No</p>
+                  <p className="mt-1.5 text-sm font-semibold text-ink">{selectedBatch.batchNo || "-"}</p>
                 </div>
-                <div className="rounded-2xl border border-line bg-slate-50/70 p-4">
-                  <p className="text-xs font-semibold tracking-[0.18em] text-muted">ACTUAL KG</p>
-                  <p className="mt-2 text-sm font-semibold text-ink">{selectedBatch.actualKg.toLocaleString()} KG</p>
+                <div className="rounded-2xl border border-line/80 bg-white px-4 py-3 shadow-[0_1px_0_rgba(15,23,42,0.02)]">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Actual Kg</p>
+                  <p className="mt-1.5 text-sm font-semibold text-ink">{selectedBatch.actualKg.toLocaleString()} KG</p>
                 </div>
-                <div className="rounded-2xl border border-line bg-slate-50/70 p-4">
-                  <p className="text-xs font-semibold tracking-[0.18em] text-muted">MATERIALS</p>
-                  <p className="mt-2 text-sm font-semibold text-ink">{selectedBatch.lines.length.toLocaleString()} ITEMS</p>
+                <div className="rounded-2xl border border-line/80 bg-white px-4 py-3 shadow-[0_1px_0_rgba(15,23,42,0.02)]">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Materials</p>
+                  <p className="mt-1.5 text-sm font-semibold text-ink">{selectedBatch.lines.length.toLocaleString()} items</p>
                 </div>
-                <div className="rounded-2xl border border-line bg-slate-50/70 p-4">
-                  <p className="text-xs font-semibold tracking-[0.18em] text-muted">BATCH SIZE</p>
-                  <p className="mt-2 text-sm font-semibold text-ink">{selectedBatch.batchSize || "-"}</p>
+                <div className="rounded-2xl border border-line/80 bg-white px-4 py-3 shadow-[0_1px_0_rgba(15,23,42,0.02)]">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Batch Size</p>
+                  <p className="mt-1.5 text-sm font-semibold text-ink">{selectedBatch.batchSize || "-"}</p>
                 </div>
-                <div className="rounded-2xl border border-line bg-slate-50/70 p-4">
-                  <p className="text-xs font-semibold tracking-[0.18em] text-muted">SPECIFIC GRAVITY</p>
-                  <p className="mt-2 text-sm font-semibold text-ink">{selectedBatch.specificGravity || "-"}</p>
+                <div className="rounded-2xl border border-line/80 bg-white px-4 py-3 shadow-[0_1px_0_rgba(15,23,42,0.02)]">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Specific Gravity</p>
+                  <p className="mt-1.5 text-sm font-semibold text-ink">{selectedBatch.specificGravity || "-"}</p>
                 </div>
-                <div className="rounded-2xl border border-line bg-slate-50/70 p-4">
-                  <p className="text-xs font-semibold tracking-[0.18em] text-muted">VISCOSITY</p>
-                  <p className="mt-2 text-sm font-semibold text-ink">{selectedBatch.viscosity ? `${selectedBatch.viscosity} sec` : "-"}</p>
+                <div className="rounded-2xl border border-line/80 bg-white px-4 py-3 shadow-[0_1px_0_rgba(15,23,42,0.02)]">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Viscosity</p>
+                  <p className="mt-1.5 text-sm font-semibold text-ink">{selectedBatch.viscosity ? `${selectedBatch.viscosity} sec` : "-"}</p>
                 </div>
-                <div className="rounded-2xl border border-line bg-slate-50/70 p-4">
-                  <p className="text-xs font-semibold tracking-[0.18em] text-muted">TARGET KG</p>
-                  <p className="mt-2 text-sm font-semibold text-ink">{selectedBatch.targetKg.toLocaleString()} KG</p>
+                <div className="rounded-2xl border border-line/80 bg-white px-4 py-3 shadow-[0_1px_0_rgba(15,23,42,0.02)]">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Target Kg</p>
+                  <p className="mt-1.5 text-sm font-semibold text-ink">{selectedBatch.targetKg.toLocaleString()} KG</p>
                 </div>
-                <div className="rounded-2xl border border-line bg-slate-50/70 p-4">
-                  <p className="text-xs font-semibold tracking-[0.18em] text-muted">CREATED AT</p>
-                  <p className="mt-2 text-sm font-semibold text-ink">{formatDateTime(selectedBatch.createdAt)}</p>
+                <div className="rounded-2xl border border-line/80 bg-white px-4 py-3 shadow-[0_1px_0_rgba(15,23,42,0.02)]">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Created At</p>
+                  <p className="mt-1.5 text-sm font-semibold text-ink">{formatDateTime(selectedBatch.createdAt)}</p>
                 </div>
-                <div className="rounded-2xl border border-line bg-slate-50/70 p-4">
-                  <p className="text-xs font-semibold tracking-[0.18em] text-muted">CREATED BY</p>
-                  <p className="mt-2 text-sm font-semibold text-ink">{selectedBatch.createdBy || "-"}</p>
+                <div className="rounded-2xl border border-line/80 bg-white px-4 py-3 shadow-[0_1px_0_rgba(15,23,42,0.02)]">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Created By</p>
+                  <p className="mt-1.5 text-sm font-semibold text-ink">{selectedBatch.createdBy || "-"}</p>
                 </div>
               </div>
 
-              <div className="overflow-x-auto rounded-3xl border border-line">
-                <table className="min-w-[600px] w-full border-collapse">
-                  <thead className="bg-slate-50 text-left text-sm text-muted">
+              <div className="overflow-x-auto rounded-2xl border border-line/80 bg-white">
+                <table className="min-w-[900px] w-full border-collapse">
+                  <thead className="bg-slate-50/80 text-left text-xs uppercase tracking-[0.12em] text-muted">
                     <tr>
-                      <th className="px-5 py-4 font-medium">Pack Size</th>
-                      <th className="px-5 py-4 font-medium">Qty</th>
-                      <th className="px-5 py-4 font-medium">Total</th>
+                      <th className="px-4 py-3 font-semibold">%</th>
+                      <th className="px-4 py-3 font-semibold">Raw Material</th>
+                      <th className="px-4 py-3 font-semibold">Std Qty</th>
+                      <th className="px-4 py-3 font-semibold">Actual Qty</th>
+                      <th className="px-4 py-3 font-semibold">Remarks</th>
+                      <th className="px-4 py-3 font-semibold">Signature</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {visiblePackRows.length > 0 ? (visiblePackRows.map((row, index) => {
-                  const total = Number(row.packSize || 0) * Number(row.quantity || 0);
-                  return (<tr key={`${selectedBatch._id}-pack-${index}`} className="border-t border-line">
-                          <td className="px-5 py-4 text-sm text-muted">{row.packSize || "-"}</td>
-                          <td className="px-5 py-4 text-sm text-muted">{row.quantity || "-"}</td>
-                          <td className="px-5 py-4 text-sm text-muted">{total.toLocaleString()}</td>
-                        </tr>);
-                })) : (<tr>
-                        <td className="px-5 py-6 text-sm text-muted" colSpan={3}>
-                          No pack size rows saved for this batch.
+                    {selectedBatch.lines.length > 0 ? (selectedBatch.lines.map((line, index) => (<tr key={`${selectedBatch._id}-${index}`} className="border-t border-line">
+                          <td className="px-4 py-3 text-sm text-muted">{line.percentage.toFixed(2)}%</td>
+                          <td className="px-4 py-3 text-sm font-semibold text-ink">{line.materialName}</td>
+                          <td className="px-4 py-3 text-sm text-muted">{line.stdQty.toLocaleString()} KG</td>
+                          <td className="px-4 py-3 text-sm text-muted">{line.actualQty.toLocaleString()} KG</td>
+                          <td className="px-4 py-3 text-sm text-muted">{line.remarks || "-"}</td>
+                          <td className="px-4 py-3 text-sm text-muted">{line.signature || "-"}</td>
+                        </tr>))) : (<tr>
+                        <td className="px-4 py-5 text-sm text-muted" colSpan={6}>
+                          No material lines saved for this batch.
                         </td>
                       </tr>)}
                   </tbody>
                 </table>
               </div>
 
-              <div className="overflow-x-auto rounded-3xl border border-line">
-                <table className="min-w-[900px] w-full border-collapse">
-                  <thead className="bg-slate-50 text-left text-sm text-muted">
+              <div className="overflow-x-auto rounded-2xl border border-line/80 bg-white">
+                <table className="min-w-[600px] w-full border-collapse">
+                  <thead className="bg-slate-50/80 text-left text-xs uppercase tracking-[0.12em] text-muted">
                     <tr>
-                      <th className="px-5 py-4 font-medium">%</th>
-                      <th className="px-5 py-4 font-medium">Raw Material</th>
-                      <th className="px-5 py-4 font-medium">Std Qty</th>
-                      <th className="px-5 py-4 font-medium">Actual Qty</th>
-                      <th className="px-5 py-4 font-medium">Remarks</th>
-                      <th className="px-5 py-4 font-medium">Signature</th>
+                      <th className="px-4 py-3 font-semibold">Pack Size</th>
+                      <th className="px-4 py-3 font-semibold">Qty</th>
+                      <th className="px-4 py-3 font-semibold">Total</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedBatch.lines.length > 0 ? (selectedBatch.lines.map((line, index) => (<tr key={`${selectedBatch._id}-${index}`} className="border-t border-line">
-                          <td className="px-5 py-4 text-sm text-muted">{line.percentage.toFixed(2)}%</td>
-                          <td className="px-5 py-4 font-semibold text-ink">{line.materialName}</td>
-                          <td className="px-5 py-4 text-sm text-muted">{line.stdQty.toLocaleString()} KG</td>
-                          <td className="px-5 py-4 text-sm text-muted">{line.actualQty.toLocaleString()} KG</td>
-                          <td className="px-5 py-4 text-sm text-muted">{line.remarks || "-"}</td>
-                          <td className="px-5 py-4 text-sm text-muted">{line.signature || "-"}</td>
-                        </tr>))) : (<tr>
-                        <td className="px-5 py-6 text-sm text-muted" colSpan={6}>
-                          No material lines saved for this batch.
+                    {visiblePackRows.length > 0 ? (visiblePackRows.map((row, index) => {
+                  const total = Number(row.packSize || 0) * Number(row.quantity || 0);
+                  return (<tr key={`${selectedBatch._id}-pack-${index}`} className="border-t border-line/70">
+                          <td className="px-4 py-3 text-sm text-ink">{row.packSize || "-"}</td>
+                          <td className="px-4 py-3 text-sm text-ink">{row.quantity || "-"}</td>
+                          <td className="px-4 py-3 text-sm font-semibold text-ink">{total.toLocaleString()}</td>
+                        </tr>);
+                })) : (<tr>
+                        <td className="px-4 py-5 text-sm text-muted" colSpan={3}>
+                          No pack size rows saved for this batch.
                         </td>
                       </tr>)}
                   </tbody>
