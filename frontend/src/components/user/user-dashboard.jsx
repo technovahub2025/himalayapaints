@@ -340,9 +340,9 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
         const XLSX = await import("xlsx-js-style");
         const worksheetData = [
             ["PRODUCTION BATCH SHEET"],
-            ["PRODUCT:", formatProductLabel(tableName || "Product 1"), "", "BATCH SIZE", "SPECIFIC GRAVITY", "VISCOSITY", "ACTUALS"],
+            ["PRODUCT:", formatProductLabel(tableName || "Product 1"), "", "BATCH SIZE", "SPECIFIC GRAVITY", "VISCOSITY", ""],
             ["BATCH NO", batchDetails.batchNo || "", "STD:", targetKg ? `${Number(targetKg).toLocaleString()} KG` : "", batchDetails.specificGravity || "", formatSecondsValue(batchDetails.viscosity), batchDetails.actuals || ""],
-            ["DATE", batchDetails.date || "", "ACTUAL:", `${distributedTotal.toLocaleString()} KG`, "", "", ""],
+            ["DATE", batchDetails.date || "", "ACTUAL:", "", "", "", ""],
             [],
             ["%", "RAW MATERIAL CODE", "STD QTY", "ACTUAL QTY", "REMARKS", "SIGNATURE"],
             ...exportTableRows.map((row) => [row.percentage, row.source, row.stdQty, row.actualQty, row.remarks, row.signature]),
@@ -547,9 +547,9 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
         drawCell(xPositions[0], y, colWidths[0], 7, "DATE", { bold: true });
         drawCell(xPositions[1], y, colWidths[1], 7, batchDetails.date || "", { bold: false });
         drawCell(xPositions[2], y, colWidths[2], 7, "ACTUAL:", { bold: true });
-        drawCell(xPositions[3], y, colWidths[3], 7, `${distributedTotal.toLocaleString()} KG`, { bold: false });
-        drawCell(xPositions[4], y, colWidths[4], 7, "ACTUALS", { bold: true });
-        drawCell(xPositions[5], y, colWidths[5], 7, batchDetails.actuals || "", { bold: false });
+        drawCell(xPositions[3], y, colWidths[3], 7, "", { bold: false });
+        drawCell(xPositions[4], y, colWidths[4], 7, batchDetails.actuals || "", { bold: false });
+        drawCell(xPositions[5], y, colWidths[5], 7, "", { bold: false });
         // Split the batch details block from the raw material table so the PDF reads
         // like two separate tables, matching the reference layout.
         y += 10;
