@@ -16,7 +16,8 @@ const EMPTY_BATCH_DETAILS = {
     date: "",
     batchSize: "",
     specificGravity: "",
-    viscosity: ""
+    viscosity: "",
+    actuals: ""
 };
 const EMPTY_PACK_ROWS = [{ packSize: "", quantity: "" }];
 const USER_DRAFT_PREFIX = "himalayapaints:user-dashboard-draft:";
@@ -283,6 +284,7 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
         const batchSize = batchDetails.batchSize.trim();
         const specificGravity = batchDetails.specificGravity.trim();
         const viscosity = batchDetails.viscosity.trim();
+        const actualsDetails = batchDetails.actuals.trim();
         const lines = items.map((item) => {
             const percentage = safePercent(item.quantity, totalQuantity);
             const suggestedKg = scaleQuantity(item.quantity, targetNumber);
@@ -315,6 +317,7 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
                     batchSize,
                     specificGravity,
                     viscosity,
+                    actuals: actualsDetails,
                     targetKg: targetNumber,
                     actualKg: distributedTotal,
                     createdBy: email ?? "",
@@ -337,9 +340,9 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
         const XLSX = await import("xlsx-js-style");
         const worksheetData = [
             ["PRODUCTION BATCH SHEET"],
-            ["PRODUCT:", formatProductLabel(tableName || "Product 1"), "", "BATCH SIZE", "SPECIFIC GRAVITY", "VISCOSITY"],
-            ["BATCH NO", batchDetails.batchNo || "", "STD:", targetKg ? `${Number(targetKg).toLocaleString()} KG` : "", batchDetails.specificGravity || "", formatSecondsValue(batchDetails.viscosity)],
-            ["DATE", batchDetails.date || "", "ACTUAL:", `${distributedTotal.toLocaleString()} KG`, "", ""],
+            ["PRODUCT:", formatProductLabel(tableName || "Product 1"), "", "BATCH SIZE", "SPECIFIC GRAVITY", "VISCOSITY", "ACTUALS"],
+            ["BATCH NO", batchDetails.batchNo || "", "STD:", targetKg ? `${Number(targetKg).toLocaleString()} KG` : "", batchDetails.specificGravity || "", formatSecondsValue(batchDetails.viscosity), batchDetails.actuals || ""],
+            ["DATE", batchDetails.date || "", "ACTUAL:", `${distributedTotal.toLocaleString()} KG`, "", "", ""],
             [],
             ["%", "RAW MATERIAL CODE", "STD QTY", "ACTUAL QTY", "REMARKS", "SIGNATURE"],
             ...exportTableRows.map((row) => [row.percentage, row.source, row.stdQty, row.actualQty, row.remarks, row.signature]),
@@ -545,8 +548,8 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
         drawCell(xPositions[1], y, colWidths[1], 7, batchDetails.date || "", { bold: false });
         drawCell(xPositions[2], y, colWidths[2], 7, "ACTUAL:", { bold: true });
         drawCell(xPositions[3], y, colWidths[3], 7, `${distributedTotal.toLocaleString()} KG`, { bold: false });
-        drawCell(xPositions[4], y, colWidths[4], 7, "", { bold: false });
-        drawCell(xPositions[5], y, colWidths[5], 7, "", { bold: false });
+        drawCell(xPositions[4], y, colWidths[4], 7, "ACTUALS", { bold: true });
+        drawCell(xPositions[5], y, colWidths[5], 7, batchDetails.actuals || "", { bold: false });
         // Split the batch details block from the raw material table so the PDF reads
         // like two separate tables, matching the reference layout.
         y += 10;
@@ -704,41 +707,77 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
             { label: "Master Amount", value: totalAmount.toLocaleString(), hint: "Stored amount sum from admin data" }
         ]}/>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-2">
-            <p className="text-lg font-semibold">Batch Details</p>
-
+      <Card className="border-border bg-white shadow-sm rounded-2xl p-6">
+        <div className="mb-5 pb-4 border-b border-border">
+          <h3 className="text-[18px] font-semibold text-slate-900">Batch Details</h3>
+        </div>
+        <div className="grid gap-6" style={{ gridTemplateColumns: "repeat(12, 1fr)" }}>
+          <div className="col-span-12 sm:col-span-6 xl:col-span-4">
+            <label htmlFor="batch-no" className="block text-[13px] font-medium text-slate-700 mb-2">Batch No</label>
+            <Input
+              id="batch-no"
+              value={batchDetails.batchNo}
+              onChange={(e) => updateBatchDetail("batchNo", e.target.value)}
+              placeholder="Enter batch number"
+              className="h-11.5 rounded-xl border-border bg-white placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
+            />
           </div>
-        </CardHeader>
-        <CardBody>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-12">
-            <div className="rounded-2xl border border-line bg-slate-50/70 px-4 py-4 xl:col-span-4">
-              <label className="text-xs font-semibold tracking-[0.22em] text-muted">BATCH NO</label>
-              <Input value={batchDetails.batchNo} onChange={(e) => updateBatchDetail("batchNo", e.target.value)} placeholder="Enter batch number" className="mt-3"/>
-            </div>
 
-            <div className="rounded-2xl border border-line bg-slate-50/70 px-4 py-4 xl:col-span-4">
-              <label className="text-xs font-semibold tracking-[0.22em] text-muted">DATE</label>
-              <Input type="date" value={batchDetails.date} onChange={(e) => updateBatchDetail("date", e.target.value)} className="mt-3"/>
-            </div>
-
-            <div className="rounded-2xl border border-line bg-slate-50/70 px-4 py-4 xl:col-span-4">
-              <label className="text-xs font-semibold tracking-[0.22em] text-muted">BATCH SIZE</label>
-              <Input value={batchDetails.batchSize} onChange={(e) => updateBatchDetail("batchSize", e.target.value)} placeholder="Enter batch size" className="mt-3"/>
-            </div>
-
-            <div className="rounded-2xl border border-line bg-slate-50/70 px-4 py-4 xl:col-span-6">
-              <label className="text-xs font-semibold tracking-[0.22em] text-muted">SPECIFIC GRAVITY</label>
-              <Input value={batchDetails.specificGravity} onChange={(e) => updateBatchDetail("specificGravity", e.target.value)} placeholder="Enter specific gravity" className="mt-3"/>
-            </div>
-
-            <div className="rounded-2xl border border-line bg-slate-50/70 px-4 py-4 xl:col-span-6">
-              <label className="text-xs font-semibold tracking-[0.22em] text-muted">VISCOSITY (SEC)</label>
-              <Input value={batchDetails.viscosity} onChange={(e) => updateBatchDetail("viscosity", e.target.value)} placeholder="Enter seconds" className="mt-3"/>
-            </div>
+          <div className="col-span-12 sm:col-span-6 xl:col-span-4">
+            <label htmlFor="batch-date" className="block text-[13px] font-medium text-slate-700 mb-2">Date</label>
+            <Input
+              id="batch-date"
+              type="date"
+              value={batchDetails.date}
+              onChange={(e) => updateBatchDetail("date", e.target.value)}
+              className="h-11.5 rounded-xl border-border bg-white placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
+            />
           </div>
-        </CardBody>
+
+          <div className="col-span-12 sm:col-span-6 xl:col-span-4">
+            <label htmlFor="batch-size" className="block text-[13px] font-medium text-slate-700 mb-2">Batch Size</label>
+            <Input
+              id="batch-size"
+              value={batchDetails.batchSize}
+              onChange={(e) => updateBatchDetail("batchSize", e.target.value)}
+              placeholder="Enter batch size"
+              className="h-11.5 rounded-xl border-border bg-white placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
+            />
+          </div>
+
+          <div className="col-span-12 sm:col-span-6 xl:col-span-4">
+            <label htmlFor="specific-gravity" className="block text-[13px] font-medium text-slate-700 mb-2">Specific Gravity</label>
+            <Input
+              id="specific-gravity"
+              value={batchDetails.specificGravity}
+              onChange={(e) => updateBatchDetail("specificGravity", e.target.value)}
+              placeholder="Enter specific gravity"
+              className="h-11.5 rounded-xl border-border bg-white placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
+            />
+          </div>
+
+          <div className="col-span-12 sm:col-span-6 xl:col-span-4">
+            <label htmlFor="viscosity" className="block text-[13px] font-medium text-slate-700 mb-2">Viscosity (sec)</label>
+            <Input
+              id="viscosity"
+              value={batchDetails.viscosity}
+              onChange={(e) => updateBatchDetail("viscosity", e.target.value)}
+              placeholder="Enter seconds"
+              className="h-11.5 rounded-xl border-border bg-white placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
+            />
+          </div>
+
+          <div className="col-span-12 sm:col-span-6 xl:col-span-4">
+            <label htmlFor="actuals" className="block text-[13px] font-medium text-slate-700 mb-2">Actuals</label>
+            <Input
+              id="actuals"
+              value={batchDetails.actuals}
+              onChange={(e) => updateBatchDetail("actuals", e.target.value)}
+              placeholder="Enter batch notes or actual values"
+              className="h-11 rounded-xl border-border bg-white placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
+            />
+          </div>
+        </div>
       </Card>
 
       <RawMaterialTable actuals={actuals} distributedTotal={distributedTotal} items={items} manualKgValues={manualKgValues} onActualChange={handleActualChange} onManualKgChange={handleManualKgChange} onRemarkChange={handleRemarkChange} onSignatureChange={handleSignatureChange} onTargetKgChange={handleTargetKgChange} remarks={remarks} signatures={signatures} targetKg={targetKg}/>

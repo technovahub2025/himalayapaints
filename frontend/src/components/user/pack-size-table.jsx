@@ -1,65 +1,67 @@
 "use client";
 import { Plus, Trash2 } from "lucide-react";
-import { Button, Card, CardBody, CardHeader, Input } from "@/components/ui";
+import { Button, Input } from "@/components/ui";
 export function PackSizeTable({ onAddRow, onDeleteRow, onPackSizeChange, onQuantityChange, packGrandTotal, packRows }) {
-    return (<Card>
-      <CardHeader>
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div className="max-w-2xl">
-            <p className="text-lg font-semibold">Pack Size Calculator</p>
+    const hasRows = packRows.length > 0;
+    return (<div className="rounded-xl border border-[#E5E7EB] bg-white shadow-sm" style={{ padding: "24px" }}>
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
+        <h3 className="text-[18px] font-semibold text-slate-900">Pack Size Calculator</h3>
+        <Button variant="secondary" onClick={onAddRow} className="h-9 px-4 text-xs font-medium rounded-lg">
+          <Plus className="mr-1.5 h-3.5 w-3.5"/>
+          Add Row
+        </Button>
+      </div>
 
-          </div>
-          <div className="flex flex-wrap gap-3 print:hidden">
-            <Button variant="secondary" onClick={onAddRow}>
-              <Plus className="mr-2 h-4 w-4"/>
-              Add Row
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
-      <CardBody className="space-y-4">
-        <div className="overflow-hidden rounded-3xl border border-line bg-white">
-          <div className="hidden grid-cols-12 gap-3 border-b border-line bg-slate-50 px-5 py-4 text-sm font-medium text-muted md:grid">
-            <div className="col-span-4">Pack Size</div>
-            <div className="col-span-5">Quantity</div>
-            <div className="col-span-3">Result</div>
-          </div>
+      {!hasRows ? (<div className="flex flex-col items-center justify-center py-12 text-center">
+          <p className="text-sm text-slate-500 mb-4">No pack sizes added yet.</p>
+          <Button variant="secondary" onClick={onAddRow} className="h-8 px-4 text-xs font-medium rounded-lg">
+            <Plus className="mr-1.5 h-3.5 w-3.5"/>
+            Add Pack Size
+          </Button>
+        </div>) : (<div className="overflow-x-auto">
+          <table className="min-w-full w-full divide-y divide-slate-200">
+            <thead className="bg-[#F8FAFC]">
+              <tr>
+                <th className="h-12 px-6 text-left text-[13px] font-medium text-slate-700 uppercase tracking-wide">Pack Size</th>
+                <th className="h-12 px-6 text-left text-[13px] font-medium text-slate-700 uppercase tracking-wide">Quantity</th>
+                <th className="h-12 px-6 text-left text-[13px] font-medium text-slate-700 uppercase tracking-wide">Result</th>
+                <th className="h-12 px-6 text-left text-[13px] font-medium text-slate-700 uppercase tracking-wide">Action</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-slate-100">
+              {packRows.map((row, index) => {
+              const result = Number(row.packSize || 0) * Number(row.quantity || 0);
+              return (<tr key={`${index}-${row.packSize}`}>
+                      <td className="px-6 py-6 align-middle">
+                        <Input type="number" min="0" step="0.01" value={row.packSize} onChange={(e) => onPackSizeChange(index, e.target.value)} placeholder="0" className="h-11 w-full rounded-xl border-[#E5E7EB] bg-white px-3 text-sm placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"/>
+                      </td>
+                      <td className="px-6 py-6 align-middle">
+                        <Input type="number" min="0" step="0.01" value={row.quantity} onChange={(e) => onQuantityChange(index, e.target.value)} placeholder="0" className="h-11 w-full rounded-xl border-[#E5E7EB] bg-white px-3 text-sm placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"/>
+                      </td>
+                      <td className="px-6 py-6 align-middle">
+                        <div className="h-11 flex items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700">{result.toLocaleString()}</div>
+                      </td>
+                      <td className="px-6 py-6 align-middle">
+                        <button type="button" onClick={() => onDeleteRow(index)} className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition-all duration-150 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600" aria-label="Delete pack row">
+                          <Trash2 className="h-4 w-4"/>
+                        </button>
+                      </td>
+                    </tr>);
+            })}
+            </tbody>
+            <tfoot>
+              <tr className="bg-slate-50/80 border-t-2 border-slate-200">
+                <td className="px-6 py-5 text-[15px] font-semibold text-slate-900">Grand Total</td>
+                <td className="px-6 py-5 text-sm text-slate-600">Auto calculated</td>
+                <td className="px-6 py-5 text-[15px] font-semibold text-slate-900">{packGrandTotal.toLocaleString()}</td>
+                <td className="px-6 py-5"></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>)}
 
-          <div className="divide-y divide-line">
-            {packRows.map((row, index) => {
-            const result = Number(row.packSize || 0) * Number(row.quantity || 0);
-            return (<div key={`${index}-${row.packSize}`} className="grid gap-3 px-4 py-4 md:grid-cols-12 md:items-center md:gap-4 md:px-5">
-                  <div className="md:col-span-4">
-                    <label className="mb-2 block text-xs font-semibold tracking-[0.18em] text-muted md:hidden">PACK SIZE</label>
-                    <Input type="number" min="0" step="0.01" value={row.packSize} onChange={(e) => onPackSizeChange(index, e.target.value)} placeholder="5"/>
-                  </div>
-
-                  <div className="md:col-span-5">
-                    <label className="mb-2 block text-xs font-semibold tracking-[0.18em] text-muted md:hidden">QUANTITY</label>
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                      <Input type="number" min="0" step="0.01" value={row.quantity} onChange={(e) => onQuantityChange(index, e.target.value)} placeholder="20"/>
-                      <button type="button" onClick={() => onDeleteRow(index)} className="inline-flex h-11 items-center justify-center rounded-2xl border border-line px-4 text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 sm:w-11 sm:px-0" aria-label="Delete pack row">
-                        <Trash2 className="h-4 w-4"/>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="md:col-span-3">
-                    <label className="mb-2 block text-xs font-semibold tracking-[0.18em] text-muted md:hidden">RESULT</label>
-                    <div className="flex h-11 items-center rounded-2xl border border-line bg-slate-50 px-4 text-sm font-semibold text-ink">
-                      {result.toLocaleString()}
-                    </div>
-                  </div>
-                </div>);
-        })}
-          </div>
-        </div>
-
-        <div className="grid gap-3 rounded-3xl border border-line bg-slate-50 px-5 py-4 md:grid-cols-12 md:items-center">
-          <div className="md:col-span-4 text-sm font-semibold text-ink">Grand Total</div>
-          <div className="md:col-span-5 text-sm text-muted">Auto calculated</div>
-          <div className="md:col-span-3 text-sm font-semibold text-ink">{packGrandTotal.toLocaleString()}</div>
-        </div>
-      </CardBody>
-    </Card>);
+      <div className="mt-6 text-xs text-slate-500">
+        Total Packs: {packRows.filter(r => r.packSize.trim() !== "" || r.quantity.trim() !== "").length}
+      </div>
+    </div>);
 }

@@ -1,88 +1,76 @@
 "use client";
-import { Input, Card, CardBody, CardHeader } from "@/components/ui";
+import { Input } from "@/components/ui";
 import { safePercent, scaleQuantity } from "@/lib/calculations";
 export function RawMaterialTable({ actuals, distributedTotal, items, manualKgValues, remarks, signatures, targetKg, onActualChange, onManualKgChange, onRemarkChange, onSignatureChange, onTargetKgChange }) {
     const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
     const targetNumber = Number(targetKg || 0);
-    return (<Card>
-      <CardHeader>
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-           <div className="max-w-2xl">
-             <p className="text-lg font-semibold tracking-wide">PRODUCTION RATIO TABLE</p>
-           </div>
-          <div className="grid w-full gap-3 md:max-w-sm">
-            <label className="text-sm font-medium text-ink">Target Production KG</label>
-            <Input type="number" min="0" step="0.01" value={targetKg} onChange={(e) => onTargetKgChange(e.target.value)}/>
+    return (<div className="rounded-xl border border-[#E5E7EB] bg-white shadow-sm" style={{ padding: "24px" }}>
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
+        <h3 className="text-[18px] font-semibold text-slate-900">Production Ratio Table</h3>
+        <div className="flex items-center gap-3">
+          <label className="text-[13px] font-medium text-slate-700">Target Production KG</label>
+          <div className="relative">
+            <Input type="number" min="0" step="0.01" value={targetKg} onChange={(e) => onTargetKgChange(e.target.value)} className="h-11 w-32 rounded-xl border-[#E5E7EB] bg-white placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none" style={{ paddingRight: "40px" }}/>
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-slate-500">KG</span>
           </div>
         </div>
-      </CardHeader>
-      <CardBody className="p-0">
-        <div className="overflow-x-auto">
-          <table className="min-w-[960px] lg:min-w-[1200px] w-full border-collapse border border-line bg-white">
-            <thead>
-              <tr className="bg-slate-100">
-                <th colSpan={6} className="border-b border-line px-3 py-3 text-left text-xs font-semibold tracking-[0.14em] text-ink sm:px-5 sm:text-sm">
-                  RAW MATERIAL CONSUMPTION
-                </th>
-              </tr>
-              <tr className="bg-slate-50 text-left text-sm text-muted">
-                <th className="border-b border-line px-3 py-3 text-xs font-medium sm:px-5 sm:py-4 sm:text-sm">%</th>
-                <th className="border-b border-line px-3 py-3 text-xs font-medium sm:px-5 sm:py-4 sm:text-sm">RAW MATERIAL CODE</th>
-                <th className="border-b border-line px-3 py-3 text-xs font-medium sm:px-5 sm:py-4 sm:text-sm">STD QTY</th>
-                <th className="border-b border-line px-3 py-3 text-xs font-medium sm:px-5 sm:py-4 sm:text-sm">ACTUAL QTY</th>
-                <th className="border-b border-line px-3 py-3 text-xs font-medium sm:px-5 sm:py-4 sm:text-sm">REMARKS</th>
-                <th className="border-b border-line px-3 py-3 text-xs font-medium sm:px-5 sm:py-4 sm:text-sm">SIGNATURE</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => {
+      </div>
+      <div className="overflow-x-auto md:overflow-visible">
+        <table className="min-w-full w-full divide-y divide-slate-200">
+          <thead className="bg-[#F8FAFC]">
+            <tr>
+              <th className="h-13 px-6 text-left text-[13px] font-medium text-slate-700 uppercase tracking-wide">%</th>
+              <th className="h-13 px-6 text-left text-[13px] font-medium text-slate-700 uppercase tracking-wide">Raw Material</th>
+              <th className="h-13 px-6 text-left text-[13px] font-medium text-slate-700 uppercase tracking-wide">Standard Qty</th>
+              <th className="h-13 px-6 text-left text-[13px] font-medium text-slate-700 uppercase tracking-wide">Actual Qty</th>
+              <th className="h-13 px-6 text-left text-[13px] font-medium text-slate-700 uppercase tracking-wide">Remarks</th>
+              <th className="h-13 px-6 text-left text-[13px] font-medium text-slate-700 uppercase tracking-wide">Signature</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-slate-100">
+            {items.map((item, index) => {
             const percentage = safePercent(item.quantity, totalQuantity);
             const suggestedKg = scaleQuantity(item.quantity, targetNumber);
             const kgValue = manualKgValues[item._id] ?? String(suggestedKg);
             const actualValue = actuals[item._id] ?? "";
             const remarkValue = remarks[item._id] ?? "";
             const signatureValue = signatures[item._id] ?? "";
-            return (<tr key={item._id} className="border-t border-line">
-                    <td className="px-3 py-3 align-top sm:px-5 sm:py-4">
-                      <div className="inline-flex rounded-2xl border border-line bg-white px-3 py-2 text-sm font-semibold text-accent sm:px-4 sm:py-3">
-                        {percentage.toFixed(2)}%
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 align-top sm:px-5 sm:py-4">
-                      <div className="text-sm font-semibold text-ink">{item.name}</div>
-                      <div className="mt-1 text-xs text-muted">Master qty: {item.quantity} KG</div>
-                    </td>
-                    <td className="px-3 py-3 align-top sm:px-5 sm:py-4">
-                      <div className="flex items-center gap-2">
-                        <Input type="number" min="0" step="0.01" value={kgValue} onChange={(e) => onManualKgChange(item._id, e.target.value)} placeholder={suggestedKg.toString()}/>
-                        <span className="shrink-0 text-xs font-semibold uppercase tracking-[0.16em] text-muted print:text-black">kg</span>
-                      </div>
-                      <p className="mt-2 text-xs text-muted">Suggested based on percentage: {suggestedKg.toLocaleString()} KG</p>
-                    </td>
-                    <td className="px-3 py-3 align-top sm:px-5 sm:py-4">
-                      <Input type="number" min="0" step="0.01" value={actualValue} onChange={(e) => onActualChange(item._id, e.target.value)} placeholder="Enter actuals"/>
-                    </td>
-                    <td className="px-3 py-3 align-top sm:px-5 sm:py-4">
-                      <Input value={remarkValue} onChange={(e) => onRemarkChange(item._id, e.target.value)} placeholder="Enter remarks"/>
-                    </td>
-                    <td className="px-3 py-3 align-top sm:px-5 sm:py-4">
-                      <Input value={signatureValue} onChange={(e) => onSignatureChange(item._id, e.target.value)} placeholder="Enter signature"/>
-                    </td>
-                  </tr>);
+            return (<tr key={item._id} className="transition-colors duration-150 hover:bg-slate-50/50">
+                      <td className="px-6 py-6 align-middle">
+                        <span className="inline-flex items-center justify-center rounded-full bg-slate-50 px-3 py-1.5 text-[13px] font-medium text-slate-700">{percentage.toFixed(2)}%</span>
+                      </td>
+                      <td className="px-6 py-6 align-middle">
+                        <div className="text-sm font-medium text-slate-900">{item.name}</div>
+                        <div className="mt-1 text-xs text-slate-500">Master Qty: {item.quantity} KG</div>
+                      </td>
+                      <td className="px-6 py-6 align-middle">
+                        <div className="flex items-center gap-2">
+                          <Input type="number" min="0" step="0.01" value={kgValue} onChange={(e) => onManualKgChange(item._id, e.target.value)} placeholder={suggestedKg.toString()} className="h-11 w-full rounded-xl border-[#E5E7EB] bg-white px-3 text-sm placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"/>
+                        </div>
+                      </td>
+                      <td className="px-6 py-6 align-middle">
+                        <Input type="number" min="0" step="0.01" value={actualValue} onChange={(e) => onActualChange(item._id, e.target.value)} placeholder="Enter actuals" className="h-11 w-full rounded-xl border-[#E5E7EB] bg-white px-3 text-sm placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"/>
+                      </td>
+                      <td className="px-6 py-6 align-middle">
+                        <Input value={remarkValue} onChange={(e) => onRemarkChange(item._id, e.target.value)} placeholder="Enter remarks" className="h-11 w-full rounded-xl border-[#E5E7EB] bg-white px-3 text-sm placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"/>
+                      </td>
+                      <td className="px-6 py-6 align-middle">
+                        <Input value={signatureValue} onChange={(e) => onSignatureChange(item._id, e.target.value)} placeholder="Enter signature" className="h-11 w-full rounded-xl border-[#E5E7EB] bg-white px-3 text-sm placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"/>
+                      </td>
+                    </tr>);
         })}
-            </tbody>
-            <tfoot className="bg-slate-50">
-              <tr>
-                <td className="border-t border-line px-3 py-3 text-sm font-semibold text-ink sm:px-5 sm:py-4">TOTAL</td>
-                <td className="border-t border-line px-3 py-3 text-sm text-muted sm:px-5 sm:py-4">Dynamic source list</td>
-                <td className="border-t border-line px-3 py-3 text-sm font-semibold text-ink sm:px-5 sm:py-4">{distributedTotal.toLocaleString()} KG</td>
-                <td className="border-t border-line px-3 py-3 text-sm text-muted sm:px-5 sm:py-4">Manual actuals only</td>
-                <td className="border-t border-line px-3 py-3 text-sm text-muted sm:px-5 sm:py-4">Remarks</td>
-                <td className="border-t border-line px-3 py-3 text-sm text-muted sm:px-5 sm:py-4">Signature</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </CardBody>
-    </Card>);
+          </tbody>
+          <tfoot>
+            <tr className="bg-slate-50/80 border-t-2 border-slate-200">
+              <td className="px-6 py-5 text-[15px] font-semibold text-slate-900">TOTAL</td>
+              <td className="px-6 py-5 text-sm text-slate-600">Total Suggested Qty</td>
+              <td className="px-6 py-5 text-[15px] font-semibold text-slate-900">{distributedTotal.toLocaleString()} KG</td>
+              <td className="px-6 py-5 text-sm text-slate-600">Total Actual Qty</td>
+              <td className="px-6 py-5 text-sm text-slate-600">Remarks</td>
+              <td className="px-6 py-5 text-sm text-slate-600">Signature</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>);
 }
