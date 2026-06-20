@@ -67,6 +67,8 @@ export function TrackingDashboard({ email, role }) {
         });
     }, [productionBatches, searchTerm]);
     const selectedBatch = productionBatches.find((batch) => batch._id === selectedBatchId) ?? null;
+    const selectedPackRows = Array.isArray(selectedBatch?.packRows) ? selectedBatch.packRows : [];
+    const visiblePackRows = selectedPackRows.filter((row) => row.packSize.trim() !== "" || row.quantity.trim() !== "");
     const visibleBatches = useMemo(() => {
         const now = new Date();
         const startOfToday = new Date(now);
@@ -95,6 +97,7 @@ export function TrackingDashboard({ email, role }) {
     }
     async function exportBatchExcel(batch) {
         const XLSX = await import("xlsx-js-style");
+        const packRows = Array.isArray(batch.packRows) ? batch.packRows.filter((row) => row.packSize.trim() !== "" || row.quantity.trim() !== "") : [];
         const worksheetData = [
             ["PRODUCTION BATCH SHEET"],
             ["PRODUCT:", formatProductLabel(batch.productName), "", "BATCH SIZE", batch.batchSize || "", "VISCOSITY", batch.viscosity || ""],
@@ -112,6 +115,12 @@ export function TrackingDashboard({ email, role }) {
             ]),
             ["TOTAL", "Materials", batch.actualKg.toLocaleString(), "", "", ""]
         ];
+        if (packRows.length > 0) {
+            worksheetData.push([], ["PACK SIZE", "QTY", "TOTAL"]);
+            packRows.forEach((row) => {
+                worksheetData.push([row.packSize || "", row.quantity || "", String(Number(row.packSize || 0) * Number(row.quantity || 0))]);
+            });
+        }
         const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, `${formatProductLabel(batch.productName)}`);
@@ -122,6 +131,7 @@ export function TrackingDashboard({ email, role }) {
         const { jsPDF } = await import("jspdf");
         const autoTableModule = await import("jspdf-autotable");
         const autoTable = autoTableModule.default ?? autoTableModule.autoTable;
+        const packRows = Array.isArray(batch.packRows) ? batch.packRows.filter((row) => row.packSize.trim() !== "" || row.quantity.trim() !== "") : [];
         const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
         doc.setFontSize(16);
         doc.text("PRODUCTION BATCH SHEET", 14, 16);
@@ -142,6 +152,17 @@ export function TrackingDashboard({ email, role }) {
                 line.signature || ""
             ])
         });
+        if (packRows.length > 0) {
+            autoTable(doc, {
+                startY: doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 8 : 120,
+                head: [["Pack Size", "Qty", "Total"]],
+                body: packRows.map((row) => [
+                    row.packSize || "",
+                    row.quantity || "",
+                    String(Number(row.packSize || 0) * Number(row.quantity || 0))
+                ])
+            });
+        }
         doc.save(`${(batch.batchNo || "batch").trim()}-production-history.pdf`);
         toast.success("Batch exported to PDF");
     }
@@ -297,6 +318,32 @@ export function TrackingDashboard({ email, role }) {
                   <p className="text-xs font-semibold tracking-[0.18em] text-muted">CREATED BY</p>
                   <p className="mt-2 text-sm font-semibold text-ink">{selectedBatch.createdBy || "-"}</p>
                 </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-3xl border border-line">
+                <table className="min-w-[600px] w-full border-collapse">
+                  <thead className="bg-slate-50 text-left text-sm text-muted">
+                    <tr>
+                      <th className="px-5 py-4 font-medium">Pack Size</th>
+                      <th className="px-5 py-4 font-medium">Qty</th>
+                      <th className="px-5 py-4 font-medium">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visiblePackRows.length > 0 ? (visiblePackRows.map((row, index) => {
+                  const total = Number(row.packSize || 0) * Number(row.quantity || 0);
+                  return (<tr key={`${selectedBatch._id}-pack-${index}`} className="border-t border-line">
+                          <td className="px-5 py-4 text-sm text-muted">{row.packSize || "-"}</td>
+                          <td className="px-5 py-4 text-sm text-muted">{row.quantity || "-"}</td>
+                          <td className="px-5 py-4 text-sm text-muted">{total.toLocaleString()}</td>
+                        </tr>);
+                })) : (<tr>
+                        <td className="px-5 py-6 text-sm text-muted" colSpan={3}>
+                          No pack size rows saved for this batch.
+                        </td>
+                      </tr>)}
+                  </tbody>
+                </table>
               </div>
 
               <div className="overflow-x-auto rounded-3xl border border-line">

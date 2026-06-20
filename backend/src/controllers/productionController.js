@@ -53,6 +53,12 @@ export async function createProductionBatch(req, res) {
                 targetKg: parsed.data.targetKg,
                 actualKg: parsed.data.actualKg ?? parsed.data.targetKg,
                 createdBy: parsed.data.createdBy || auth.email,
+                packRows: Array.isArray(parsed.data.packRows)
+                    ? parsed.data.packRows.map((row) => ({
+                        packSize: row.packSize || "",
+                        quantity: row.quantity || ""
+                    }))
+                    : [],
                 lines: parsed.data.lines.map((line) => ({
                     itemId: line.itemId || "",
                     materialName: line.materialName,

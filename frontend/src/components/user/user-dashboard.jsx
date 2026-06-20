@@ -321,6 +321,12 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
                     targetKg: targetNumber,
                     actualKg: distributedTotal,
                     createdBy: email ?? "",
+                    packRows: packRows
+                        .filter((row) => row.packSize.trim() !== "" || row.quantity.trim() !== "")
+                        .map((row) => ({
+                        packSize: row.packSize.trim(),
+                        quantity: row.quantity.trim()
+                    })),
                     lines
                 })
             });

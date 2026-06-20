@@ -8,6 +8,10 @@ const ProductionLineSchema = new Schema({
     remarks: { type: String, trim: true, default: "" },
     signature: { type: String, trim: true, default: "" }
 }, { _id: false });
+const ProductionPackRowSchema = new Schema({
+    packSize: { type: String, trim: true, default: "" },
+    quantity: { type: String, trim: true, default: "" }
+}, { _id: false });
 const ProductionBatchSchema = new Schema({
     productName: { type: String, required: true, trim: true, index: true },
     batchNo: { type: String, trim: true, default: "" },
@@ -17,6 +21,7 @@ const ProductionBatchSchema = new Schema({
     targetKg: { type: Number, required: true, min: 0 },
     actualKg: { type: Number, required: true, min: 0 },
     createdBy: { type: String, trim: true, default: "" },
+    packRows: { type: [ProductionPackRowSchema], default: [] },
     lines: { type: [ProductionLineSchema], default: [] }
 }, { timestamps: true });
 ProductionBatchSchema.index({ productName: 1, createdAt: 1 });
