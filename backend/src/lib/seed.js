@@ -5,12 +5,12 @@ import Table from "../models/Table.js";
 import User from "../models/User.js";
 const DEFAULT_ADMIN = {
     email: "admin@gmail.com",
-    password: "admin@123",
+    password: "test@123",
     role: "admin"
 };
 const DEFAULT_USER = {
     email: "user@gmail.com",
-    password: "user@123",
+    password: "test@123",
     role: "user"
 };
 const DEFAULT_TABLE_NAME = "Table 1";
