@@ -4,13 +4,13 @@ import Item from "@/models/Item";
 import Table from "@/models/Table";
 import User from "@/models/User";
 const DEFAULT_ADMIN = {
-    email: "admin@gmail.com",
-    password: "test@123",
+    email: "himalayaadmin@gmail.com",
+    password: "himalayatest@123",
     role: "admin"
 };
 const DEFAULT_USER = {
-    email: "user@gmail.com",
-    password: "test@123",
+    email: "himalayauseer@gmail.com",
+    password: "himalayatest@123",
     role: "user"
 };
 const DEFAULT_TABLE_NAME = "Table 1";
