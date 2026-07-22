@@ -4,12 +4,12 @@ import Item from "../models/Item.js";
 import Table from "../models/Table.js";
 import User from "../models/User.js";
 const DEFAULT_ADMIN = {
-    email: "admin@gmail.com",
+    email: "himalayaadmin@gmail.com",
     password: "test@123",
     role: "admin"
 };
 const DEFAULT_USER = {
-    email: "user@gmail.com",
+    email: "himalayauser@gmail.com",
     password: "test@123",
     role: "user"
 };
