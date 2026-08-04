@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { BarChart3, Calculator, ClipboardList, LogOut, Menu, ShieldCheck, X, Users } from "lucide-react";
 import { Button, cx } from "@/components/ui";
 import { useAuthSessionContext } from "@/components/providers";
+import { SiteFooter } from "@/components/site-footer";
 import { apiFetch } from "@/services/api-client";
 const navItems = {
     admin: [
@@ -37,8 +38,8 @@ export function AppShell({ role, children, email, tableName }) {
         params.set("tableName", tableName);
         return `${href}?${params.toString()}`;
     }
-    return (<div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(15,118,110,0.16),_transparent_28%),linear-gradient(180deg,#f8f4ec_0%,#f3efe6_100%)] text-ink">
-      <div className="mx-auto flex min-h-screen max-w-[1600px] flex-col lg:flex-row">
+    return (<div className="flex min-h-screen flex-col bg-[radial-gradient(circle_at_top_left,_rgba(15,118,110,0.16),_transparent_28%),linear-gradient(180deg,#f8f4ec_0%,#f3efe6_100%)] text-ink">
+      <div className="mx-auto flex w-full flex-1 max-w-[1600px] flex-col lg:flex-row">
         <div className="border-b border-line bg-white/80 px-4 py-3 backdrop-blur lg:hidden print:hidden">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -104,5 +105,6 @@ export function AppShell({ role, children, email, tableName }) {
 
         <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
       </div>
+      <SiteFooter />
     </div>);
 }
