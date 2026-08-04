@@ -4,11 +4,13 @@ import { ArrowRight, Eye, EyeOff, LoaderCircle } from "lucide-react";
 import { Button, Card, CardBody, CardHeader, Input, Label, Subtitle, Title } from "@/components/ui";
 import { toast } from "sonner";
 import { apiFetch } from "@/services/api-client";
+import { useAuthSessionContext } from "@/components/providers";
 function roleRedirectPath(role) {
     return role === "admin" ? "/admin" : "/user";
 }
 export function LoginPage() {
     const navigate = useNavigate();
+    const authSession = useAuthSessionContext();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
@@ -22,6 +24,7 @@ export function LoginPage() {
                 json: { email, password }
             });
             toast.success("Welcome back");
+            await authSession?.refreshSession?.();
             navigate(roleRedirectPath(data.role), { replace: true });
         }
         catch (error) {

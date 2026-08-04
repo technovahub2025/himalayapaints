@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { BarChart3, Calculator, ClipboardList, LogOut, Menu, ShieldCheck, X, Users } from "lucide-react";
 import { Button, cx } from "@/components/ui";
+import { useAuthSessionContext } from "@/components/providers";
 import { apiFetch } from "@/services/api-client";
 const navItems = {
     admin: [
@@ -18,12 +19,14 @@ const navItems = {
 export function AppShell({ role, children, email, tableName }) {
     const location = useLocation();
     const navigate = useNavigate();
+    const authSession = useAuthSessionContext();
     const [open, setOpen] = useState(false);
     useEffect(() => {
         setOpen(false);
     }, [location.pathname]);
     async function handleLogout() {
         await apiFetch("/api/auth/logout", { method: "POST" });
+        await authSession?.refreshSession?.();
         navigate("/login", { replace: true });
     }
     function buildHref(href) {
