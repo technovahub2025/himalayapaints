@@ -12,7 +12,7 @@ export function ProductSelector({ value, options, onSelect, disabled = false, la
         const needle = query.trim().toLowerCase();
         return options.filter((option) => formatProductLabel(option).toLowerCase().includes(needle));
     }, [options, query]);
-    return (<div className="relative grid w-full gap-2 sm:min-w-[260px]">
+    return (<div className="relative grid w-full min-w-0 gap-2 sm:min-w-[260px]">
       <label className="text-sm font-medium text-ink">{label}</label>
       <Input type="search" value={query} disabled={disabled} onChange={(e) => {
             setQuery(e.target.value);

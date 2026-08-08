@@ -3,6 +3,15 @@ export const loginSchema = z.object({
     email: z.string().email(),
     password: z.string().min(6)
 });
+export const passwordResetSchema = z.object({
+    email: z.string().email().optional(),
+    newPassword: z.string().min(6, "Password must be at least 6 characters"),
+    confirmPassword: z.string().min(6, "Password must be at least 6 characters").optional()
+});
+export const adminUserUpdateSchema = z.object({
+    email: z.string().trim().email("Enter a valid user ID/email"),
+    newPassword: z.string().min(6, "Password must be at least 6 characters").optional().or(z.literal(""))
+});
 export const itemSchema = z.object({
     tableName: z.string().trim().min(1, "Table name is required"),
     code: z.string().trim().optional(),

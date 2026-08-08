@@ -1,9 +1,9 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import { AdminPage } from "@/pages/AdminPage";
 import { HomePage } from "@/pages/HomePage";
 import { LoginPage } from "@/pages/LoginPage";
-import { AdminPage } from "@/pages/AdminPage";
-import { UserPage } from "@/pages/UserPage";
 import { TrackingPage } from "@/pages/TrackingPage";
+import { UserPage } from "@/pages/UserPage";
 export function App() {
     return (<Routes>
       <Route path="/" element={<HomePage />}/>

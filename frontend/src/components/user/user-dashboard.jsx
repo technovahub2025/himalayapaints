@@ -648,11 +648,11 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
         };
         document.body.appendChild(iframe);
     }
-    return (<div className="space-y-5 sm:space-y-6">
+    return (<div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-2xl">
-          <Title>User Dashboard</Title>
-          <Subtitle>Read-only master data from admin with live percentage distribution and production outputs.</Subtitle>
+          <Title className="text-2xl sm:text-3xl">User Dashboard</Title>
+          <Subtitle className="text-sm sm:text-base">Read-only master data from admin with live percentage distribution and production outputs.</Subtitle>
           {email ? <p className="mt-2 text-sm text-muted">Signed in as {email}</p> : null}
         </div>
         <div className="w-full max-w-none rounded-3xl border border-line bg-white/80 p-3 shadow-sm backdrop-blur print:hidden sm:p-4 lg:max-w-4xl">
@@ -713,11 +713,11 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
             { label: "Master Amount", value: totalAmount.toLocaleString(), hint: "Stored amount sum from admin data" }
         ]}/>
 
-      <Card className="border-border bg-white shadow-sm rounded-2xl p-6">
+      <Card className="border-border bg-white shadow-sm rounded-2xl p-4 sm:p-6">
         <div className="mb-5 pb-4 border-b border-border">
           <h3 className="text-[18px] font-semibold text-slate-900">Batch Details</h3>
         </div>
-        <div className="grid gap-6" style={{ gridTemplateColumns: "repeat(12, 1fr)" }}>
+        <div className="grid gap-4 sm:gap-6" style={{ gridTemplateColumns: "repeat(12, minmax(0, 1fr))" }}>
           <div className="col-span-12 sm:col-span-6 xl:col-span-4">
             <label htmlFor="batch-no" className="block text-[13px] font-medium text-slate-700 mb-2">Batch No</label>
             <Input

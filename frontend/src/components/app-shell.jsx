@@ -1,57 +1,80 @@
 "use client";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { BarChart3, Calculator, ClipboardList, LogOut, Menu, ShieldCheck, X, Users } from "lucide-react";
+import { BarChart3, Calculator, ClipboardList, Layers3, LogOut, Menu, Package2, Settings, ShieldCheck, Users, X } from "lucide-react";
 import { Button, cx } from "@/components/ui";
 import { useAuthSessionContext } from "@/components/providers";
 import { SiteFooter } from "@/components/site-footer";
 import { apiFetch } from "@/services/api-client";
+import { toast } from "sonner";
 const navItems = {
     admin: [
-        { href: "/admin", label: "Admin Dashboard", icon: ShieldCheck },
+        { href: "/admin", section: "workspace", label: "Admin", icon: ShieldCheck, adminEntry: true },
         { href: "/user", label: "User View", icon: Users },
-        { href: "/tracking", label: "Production History", icon: ClipboardList }
+        { href: "/admin", section: "dashboard", label: "Dashboard", icon: BarChart3 },
+        { href: "/tracking", label: "Production History", icon: ClipboardList },
+        { href: "/admin", section: "settings", label: "Settings", icon: Settings }
     ],
-    user: [
-        { href: "/user", label: "User Dashboard", icon: Users },
-        { href: "/tracking", label: "Production History", icon: ClipboardList }
-    ]
+    user: [{ href: "/tracking", label: "Production History", icon: ClipboardList }]
 };
 export function AppShell({ role, children, email, tableName }) {
     const location = useLocation();
     const navigate = useNavigate();
     const authSession = useAuthSessionContext();
     const [open, setOpen] = useState(false);
+    const [loggingOut, setLoggingOut] = useState(false);
     useEffect(() => {
         setOpen(false);
-    }, [location.pathname]);
+    }, [location.pathname, location.search]);
     async function handleLogout() {
-        await apiFetch("/api/auth/logout", { method: "POST" });
-        await authSession?.refreshSession?.();
-        navigate("/login", { replace: true });
-    }
-    function buildHref(href) {
-        if (!tableName) {
-            return href;
+        setLoggingOut(true);
+        try {
+            await apiFetch("/api/auth/logout", { method: "POST" });
+            await authSession?.refreshSession?.();
+            navigate("/login", { replace: true });
         }
-        const params = new URLSearchParams();
+        catch (error) {
+            toast.error(error instanceof Error ? error.message : "Logout failed. Please try again.");
+        }
+        finally {
+            setLoggingOut(false);
+        }
+    }
+    function buildHref(item) {
+        const href = item.href;
+        if (!tableName) {
+            return item.section ? `${href}?section=${encodeURIComponent(item.section)}` : href;
+        }
+        const params = new URLSearchParams(item.search || "");
         params.set("tableName", tableName);
+        if (item.section) {
+            params.set("section", item.section);
+        }
         return `${href}?${params.toString()}`;
     }
-    return (<div className="flex min-h-screen flex-col bg-[radial-gradient(circle_at_top_left,_rgba(15,118,110,0.16),_transparent_28%),linear-gradient(180deg,#f8f4ec_0%,#f3efe6_100%)] text-ink">
-      <div className="mx-auto flex w-full flex-1 max-w-[1600px] flex-col lg:flex-row">
-        <div className="border-b border-line bg-white/80 px-4 py-3 backdrop-blur lg:hidden print:hidden">
+    function openAdminSection(section) {
+        const params = new URLSearchParams();
+        if (tableName) {
+            params.set("tableName", tableName);
+        }
+        params.set("section", section);
+        navigate(`/admin?${params.toString()}`);
+    }
+    const currentSection = new URLSearchParams(location.search).get("section") || "dashboard";
+    return (<div className="flex min-h-screen flex-col overflow-x-hidden bg-[radial-gradient(circle_at_top_left,_rgba(15,118,110,0.16),_transparent_28%),linear-gradient(180deg,#f8f4ec_0%,#f3efe6_100%)] text-ink">
+      <div className="flex w-full min-w-0 flex-1 flex-col lg:flex-row">
+        <div className="sticky top-0 z-20 border-b border-line bg-white/85 px-4 py-3 backdrop-blur lg:hidden print:hidden">
           <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent text-white shadow-soft">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-accent text-white shadow-soft sm:h-11 sm:w-11">
                 <BarChart3 className="h-6 w-6"/>
               </div>
-              <div>
-                <p className="text-base font-semibold">Himalaya Paints</p>
-                <p className="text-xs text-muted capitalize">{role} Dashboard</p>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold sm:text-base">Himalaya Paints</p>
+                <p className="text-xs text-muted capitalize">{role} Workspace</p>
               </div>
             </div>
-            <Button variant="secondary" onClick={() => setOpen(true)} className="h-11 w-11 px-0">
+            <Button variant="secondary" onClick={() => setOpen(true)} className="h-10 w-10 shrink-0 px-0 sm:h-11 sm:w-11" aria-label="Open navigation menu" aria-expanded={open}>
               <Menu className="h-5 w-5"/>
             </Button>
           </div>
@@ -59,27 +82,28 @@ export function AppShell({ role, children, email, tableName }) {
 
         {open ? (<button type="button" className="fixed inset-0 z-30 bg-slate-950/40 lg:hidden" onClick={() => setOpen(false)} aria-label="Close navigation overlay"/>) : null}
 
-        <aside className={cx("fixed inset-y-0 left-0 z-40 w-[88vw] max-w-sm border-r border-line bg-white/95 px-5 py-4 shadow-2xl backdrop-blur transition-transform duration-300 lg:static lg:z-auto lg:min-h-screen lg:w-80 lg:translate-x-0 lg:border-b-0 lg:px-6 lg:py-8 print:hidden", open ? "translate-x-0" : "-translate-x-full lg:translate-x-0")}>
+        <aside className={cx("fixed inset-y-0 left-0 z-40 w-[88vw] max-w-sm border-r border-line bg-white/95 px-4 py-4 shadow-2xl backdrop-blur transition-transform duration-300 sm:px-5 lg:static lg:z-auto lg:min-h-screen lg:w-80 lg:translate-x-0 lg:border-b-0 lg:px-6 lg:py-8 print:hidden", open ? "translate-x-0" : "-translate-x-full lg:translate-x-0")}>
           <div className="mb-8 flex items-center justify-between gap-3 lg:justify-start">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent text-white shadow-soft">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-accent text-white shadow-soft sm:h-12 sm:w-12">
                 <BarChart3 className="h-6 w-6"/>
               </div>
-              <div>
-                <p className="text-lg font-semibold">Himalaya Paints</p>
-                <p className="text-sm text-muted capitalize">{role} Dashboard</p>
+              <div className="min-w-0">
+                <p className="truncate text-base font-semibold sm:text-lg">Himalaya Paints</p>
+                <p className="text-sm text-muted capitalize">{role} Workspace</p>
               </div>
             </div>
-            <Button variant="ghost" className="h-11 w-11 px-0 lg:hidden" onClick={() => setOpen(false)}>
+            <Button variant="ghost" className="h-10 w-10 px-0 lg:hidden sm:h-11 sm:w-11" onClick={() => setOpen(false)}>
               <X className="h-5 w-5"/>
             </Button>
           </div>
 
-          <nav className="grid gap-2">
+          <nav className="grid gap-2" aria-label="Primary navigation">
             {navItems[role].map((item) => {
             const Icon = item.icon;
-            const active = location.pathname === item.href;
-            return (<Link key={item.href} to={buildHref(item.href)} className={cx("flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition", active ? "bg-accent text-white shadow-soft" : "bg-transparent text-ink hover:bg-slate-100")}>
+            const hasSection = new URLSearchParams(location.search).has("section");
+            const active = location.pathname === item.href && (item.adminEntry ? currentSection === "workspace" : (!item.section || currentSection === item.section));
+            return (<Link key={`${item.href}-${item.section || "default"}`} to={buildHref(item)} className={cx("flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition", active ? "bg-accent text-white shadow-soft" : "bg-transparent text-ink hover:bg-slate-100")}>
                   <Icon className="h-4 w-4"/>
                   {item.label}
                 </Link>);
@@ -96,14 +120,34 @@ export function AppShell({ role, children, email, tableName }) {
                 <p className="text-xs text-muted">{email}</p>
               </div>
             </div>
-            <Button variant="secondary" className="mt-4 w-full" onClick={handleLogout}>
+            <Button variant="secondary" className="mt-4 w-full" onClick={handleLogout} disabled={loggingOut} aria-label="Log out of Himalaya Paints">
               <LogOut className="mr-2 h-4 w-4"/>
               Logout
             </Button>
           </div>
         </aside>
 
-        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
+        <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+          {role === "admin" && location.pathname === "/admin" ? <header className="mb-6 rounded-[2rem] border border-slate-200/80 bg-white/90 p-4 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.45)] backdrop-blur sm:mb-7 sm:p-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">Admin</p>
+                <h1 className="mt-1 text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">Admin workspace</h1>
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+                <Button variant={location.pathname === "/admin" && currentSection === "products" ? "primary" : "secondary"} onClick={() => openAdminSection("products")} aria-pressed={location.pathname === "/admin" && currentSection === "products"}>
+                  <Package2 className="mr-2 h-4 w-4" />
+                  Products
+                </Button>
+                <Button variant={location.pathname === "/admin" && currentSection === "rawMaterials" ? "primary" : "secondary"} onClick={() => openAdminSection("rawMaterials")} aria-pressed={location.pathname === "/admin" && currentSection === "rawMaterials"}>
+                  <Layers3 className="mr-2 h-4 w-4" />
+                  Raw Materials
+                </Button>
+              </div>
+            </div>
+          </header> : null}
+          {children}
+        </main>
       </div>
       <SiteFooter />
     </div>);

@@ -417,11 +417,11 @@ export function TrackingDashboard({ email, role }) {
             batchDetailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
         });
     }
-    return (<div className="space-y-6">
+    return (<div className="space-y-5 sm:space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-2xl">
-          <Title>Tracking</Title>
-          <Subtitle>Dedicated page for production history across all products.</Subtitle>
+          <Title className="text-2xl sm:text-3xl">Tracking</Title>
+          <Subtitle className="text-sm sm:text-base">Dedicated page for production history across all products.</Subtitle>
           {email ? <p className="mt-2 text-sm text-muted">Signed in as {email}</p> : null}
         </div>
         <div className="w-full max-w-2xl rounded-3xl border border-line bg-white/80 p-4 shadow-sm backdrop-blur">
@@ -454,34 +454,63 @@ export function TrackingDashboard({ email, role }) {
           </div>
         </CardHeader>
         <CardBody className="p-0">
-          <div ref={historyScrollRef} className="max-h-[620px] overflow-auto">
-            <table className="min-w-[1100px] w-full border-collapse">
-              <thead className="bg-slate-50 text-left text-sm text-muted">
+          <div className="md:hidden p-4 space-y-3">
+            {loading ? (<div className="rounded-2xl border border-line bg-white p-4 text-sm text-muted">Loading production history...</div>) : visibleBatches.length > 0 ? (visibleBatches.map((batch) => (<div key={batch._id} className="rounded-2xl border border-line bg-white p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Product</p>
+                    <p className="mt-1 text-sm font-semibold text-ink">{formatProductLabel(batch.productName)}</p>
+                    <p className="mt-1 text-xs text-muted">{batch.batchNo || "N/A"}</p>
+                  </div>
+                  <p className="text-sm font-semibold text-ink">{batch.actualKg.toLocaleString()} KG</p>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Materials</p>
+                    <p className="mt-1 text-sm font-medium text-ink">{batch.lines.length} items</p>
+                  </div>
+                  <div className="rounded-xl bg-slate-50 p-3">
+                    <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Created At</p>
+                    <p className="mt-1 text-sm font-medium text-ink">{formatDateTime(batch.createdAt)}</p>
+                  </div>
+                </div>
+                <div className="mt-4 flex justify-end">
+                  <Button variant="secondary" onClick={() => handleViewBatch(batch._id)}>
+                    <Eye className="mr-2 h-4 w-4"/>
+                    View
+                  </Button>
+                </div>
+              </div>))) : (<div className="rounded-2xl border border-line bg-white p-4 text-sm text-muted">{searchTerm.trim() || quickFilter !== "all" ? "No batches match your filters." : "No production batches saved yet."}</div>)}
+            {visibleCount < filteredBatches.length ? (<div ref={historyLoadMoreRef} className="py-3 text-center text-xs text-muted">Loading more batches...</div>) : null}
+          </div>
+          <div ref={historyScrollRef} className="hidden max-h-[620px] overflow-auto md:block">
+            <table className="min-w-[860px] sm:min-w-[1100px] w-full border-collapse">
+              <thead className="bg-slate-50 text-left text-[11px] text-muted sm:text-sm">
                 <tr>
-                  <th className="px-5 py-4 font-medium">Product</th>
-                  <th className="px-5 py-4 font-medium">Batch No</th>
-                  <th className="px-5 py-4 font-medium">Actual KG</th>
-                  <th className="px-5 py-4 font-medium">Materials</th>
-                  <th className="px-5 py-4 font-medium">Created At</th>
-                  <th className="px-5 py-4 font-medium text-right">Action</th>
+                  <th className="px-4 py-4 font-medium sm:px-5">Product</th>
+                  <th className="px-4 py-4 font-medium sm:px-5">Batch No</th>
+                  <th className="px-4 py-4 font-medium sm:px-5">Actual KG</th>
+                  <th className="px-4 py-4 font-medium sm:px-5">Materials</th>
+                  <th className="px-4 py-4 font-medium sm:px-5">Created At</th>
+                  <th className="px-4 py-4 font-medium text-right sm:px-5">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (<tr>
-                    <td className="px-5 py-6 text-sm text-muted" colSpan={6}>
+                    <td className="px-4 py-6 text-sm text-muted sm:px-5" colSpan={6}>
                       Loading production history...
                     </td>
                   </tr>) : visibleBatches.length > 0 ? (visibleBatches.map((batch) => (<tr key={batch._id} className="border-t border-line">
-                      <td className="px-5 py-4">
+                      <td className="px-4 py-4 sm:px-5">
                         <div className="font-semibold text-ink">{formatProductLabel(batch.productName)}</div>
                       </td>
-                      <td className="px-5 py-4">
+                      <td className="px-4 py-4 sm:px-5">
                         <div className="font-semibold text-ink">{batch.batchNo || "N/A"}</div>
                       </td>
-                      <td className="px-5 py-4 font-semibold text-ink">{batch.actualKg.toLocaleString()} KG</td>
-                      <td className="px-5 py-4 text-sm text-muted">{batch.lines.length} items</td>
-                      <td className="px-5 py-4 text-sm text-muted">{formatDateTime(batch.createdAt)}</td>
-                      <td className="px-5 py-4">
+                      <td className="px-4 py-4 font-semibold text-ink sm:px-5">{batch.actualKg.toLocaleString()} KG</td>
+                      <td className="px-4 py-4 text-sm text-muted sm:px-5">{batch.lines.length} items</td>
+                      <td className="px-4 py-4 text-sm text-muted sm:px-5">{formatDateTime(batch.createdAt)}</td>
+                      <td className="px-4 py-4 sm:px-5">
                         <div className="flex justify-end">
                           <Button variant="secondary" onClick={() => handleViewBatch(batch._id)}>
                             <Eye className="mr-2 h-4 w-4"/>
@@ -490,7 +519,7 @@ export function TrackingDashboard({ email, role }) {
                         </div>
                       </td>
                     </tr>))) : (<tr>
-                    <td className="px-5 py-6 text-sm text-muted" colSpan={6}>
+                    <td className="px-4 py-6 text-sm text-muted sm:px-5" colSpan={6}>
                       {searchTerm.trim() || quickFilter !== "all" ? "No batches match your filters." : "No production batches saved yet."}
                     </td>
                   </tr>)}
@@ -503,7 +532,7 @@ export function TrackingDashboard({ email, role }) {
         </CardBody>
       </Card>
 
-      <div ref={batchDetailsRef}>
+          <div ref={batchDetailsRef}>
         <Card>
         <CardHeader>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -567,7 +596,36 @@ export function TrackingDashboard({ email, role }) {
                 </div>
               </div>
 
-              <div className="overflow-x-auto rounded-2xl border border-line/80 bg-white">
+              <div className="grid gap-3 md:hidden">
+                {selectedBatch.lines.length > 0 ? (selectedBatch.lines.map((line, index) => (<div key={`${selectedBatch._id}-${index}`} className="rounded-2xl border border-line/80 bg-white p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Raw Material</p>
+                        <p className="mt-1 text-sm font-semibold text-ink">{line.materialName}</p>
+                      </div>
+                      <p className="text-sm font-semibold text-ink">{line.percentage.toFixed(2)}%</p>
+                    </div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      <div className="rounded-xl bg-slate-50 p-3">
+                        <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Std Qty</p>
+                        <p className="mt-1 text-sm font-medium text-ink">{line.stdQty.toLocaleString()} KG</p>
+                      </div>
+                      <div className="rounded-xl bg-slate-50 p-3">
+                        <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Actual Qty</p>
+                        <p className="mt-1 text-sm font-medium text-ink">{line.actualQty.toLocaleString()} KG</p>
+                      </div>
+                      <div className="rounded-xl bg-slate-50 p-3">
+                        <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Remarks</p>
+                        <p className="mt-1 text-sm font-medium text-ink">{line.remarks || "-"}</p>
+                      </div>
+                      <div className="rounded-xl bg-slate-50 p-3">
+                        <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Signature</p>
+                        <p className="mt-1 text-sm font-medium text-ink">{line.signature || "-"}</p>
+                      </div>
+                    </div>
+                  </div>))) : (<div className="rounded-2xl border border-line/80 bg-white p-4 text-sm text-muted">No material lines saved for this batch.</div>)}
+              </div>
+              <div className="overflow-x-auto rounded-2xl border border-line/80 bg-white hidden md:block">
                 <table className="min-w-[900px] w-full border-collapse">
                   <thead className="bg-slate-50/80 text-left text-xs uppercase tracking-[0.12em] text-muted">
                     <tr>
@@ -596,7 +654,31 @@ export function TrackingDashboard({ email, role }) {
                 </table>
               </div>
 
-              <div className="overflow-x-auto rounded-2xl border border-line/80 bg-white">
+              <div className="grid gap-3 md:hidden">
+                {visiblePackRows.length > 0 ? (visiblePackRows.map((row, index) => {
+                  const total = Number(row.packSize || 0) * Number(row.quantity || 0);
+                  return (<div key={`${selectedBatch._id}-pack-${index}`} className="rounded-2xl border border-line/80 bg-white p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Pack Size</p>
+                          <p className="mt-1 text-sm font-semibold text-ink">{row.packSize || "-"}</p>
+                        </div>
+                        <p className="text-sm font-semibold text-ink">{total.toLocaleString()}</p>
+                      </div>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        <div className="rounded-xl bg-slate-50 p-3">
+                          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Qty</p>
+                          <p className="mt-1 text-sm font-medium text-ink">{row.quantity || "-"}</p>
+                        </div>
+                        <div className="rounded-xl bg-slate-50 p-3">
+                          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Total</p>
+                          <p className="mt-1 text-sm font-medium text-ink">{total.toLocaleString()}</p>
+                        </div>
+                      </div>
+                    </div>);
+                })) : (<div className="rounded-2xl border border-line/80 bg-white p-4 text-sm text-muted">No pack size rows saved for this batch.</div>)}
+              </div>
+              <div className="overflow-x-auto rounded-2xl border border-line/80 bg-white hidden md:block">
                 <table className="min-w-[600px] w-full border-collapse">
                   <thead className="bg-slate-50/80 text-left text-xs uppercase tracking-[0.12em] text-muted">
                     <tr>

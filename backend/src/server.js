@@ -1,5 +1,7 @@
+import dotenv from "dotenv";
 import { createApp } from "./app.js";
 import { dbConnect } from "./lib/db.js";
+dotenv.config({ path: new URL("../.env", import.meta.url) });
 const port = Number(process.env.PORT || 3001);
 const app = createApp();
 let server = null;

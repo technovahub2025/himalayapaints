@@ -7,6 +7,7 @@ import dotenv from "dotenv";
 import authRoutes from "./routes/authRoutes.js";
 import itemRoutes from "./routes/itemRoutes.js";
 import adminItemRoutes from "./routes/adminItemRoutes.js";
+import adminUserRoutes from "./routes/adminUserRoutes.js";
 import tableRoutes from "./routes/tableRoutes.js";
 import rawMaterialRoutes from "./routes/rawMaterialRoutes.js";
 import productionRoutes from "./routes/productionRoutes.js";
@@ -21,12 +22,7 @@ function parseAllowedOrigins(value) {
 }
 export function createApp() {
     const app = express();
-    const allowedOrigins = [
-        ...new Set([
-            ...parseAllowedOrigins(process.env.FRONTEND_ORIGIN),
-            "http://localhost:5173"
-        ])
-    ];
+    const allowedOrigins = parseAllowedOrigins(process.env.FRONTEND_ORIGIN || "http://localhost:5173");
     const corsOptions = {
         origin(origin, callback) {
             if (!origin || allowedOrigins.includes(origin)) {
@@ -64,6 +60,7 @@ export function createApp() {
     }), authRoutes);
     app.use("/api/items", itemRoutes);
     app.use("/api/admin/items", adminItemRoutes);
+    app.use("/api/admin/users", adminUserRoutes);
     app.use("/api/admin/tables", tableRoutes);
     app.use("/api/admin/raw-materials", rawMaterialRoutes);
     app.use("/api/production", productionRoutes);

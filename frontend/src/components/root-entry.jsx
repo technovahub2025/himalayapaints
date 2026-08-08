@@ -15,12 +15,12 @@ export function RootEntry({ destination, heading, subtitle, ctaLabel, autoRedire
         return () => window.clearTimeout(timer);
     }, [autoRedirect, destination, navigate]);
     return (<div className="flex min-h-screen flex-col bg-[radial-gradient(circle_at_top_left,_rgba(15,118,110,0.12),_transparent_32%),linear-gradient(180deg,#f8f4ec_0%,#f3efe6_100%)]">
-      <div className="flex flex-1 items-center justify-center px-4 py-10">
+      <div className="flex flex-1 items-start justify-center px-3 py-6 sm:items-center sm:px-4 sm:py-10">
         <Card className="w-full max-w-lg">
-          <CardBody className="space-y-5 p-6 sm:p-8">
+          <CardBody className="space-y-4 p-5 sm:space-y-5 sm:p-8">
             <div className="space-y-2">
-              <Title className="text-2xl sm:text-3xl">{heading}</Title>
-              <Subtitle className="mt-0 text-base">{subtitle}</Subtitle>
+              <Title className="text-xl sm:text-2xl lg:text-3xl">{heading}</Title>
+              <Subtitle className="mt-0 text-sm sm:text-base">{subtitle}</Subtitle>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
               <Link to={destination} className={cx("inline-flex w-full items-center justify-center rounded-2xl bg-accent px-4 py-2.5 text-sm font-medium text-white transition hover:bg-teal-700 sm:w-auto")}>

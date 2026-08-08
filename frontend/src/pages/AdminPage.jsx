@@ -12,8 +12,8 @@ function getTableName(search) {
     return tableName;
 }
 function getSection(search) {
-    const params = new URLSearchParams(search);
-    return params.get("section")?.trim() === "rawMaterials" ? "rawMaterials" : "products";
+    const section = new URLSearchParams(search).get("section")?.trim();
+    return ["workspace", "products", "rawMaterials", "production", "dashboard", "settings"].includes(section) ? section : "dashboard";
 }
 export function AdminPage() {
     const { user, loading } = useAuthSession();
@@ -82,6 +82,6 @@ export function AdminPage() {
         return <LoadingScreen title="Redirecting" subtitle="You do not have access to this page."/>;
     }
     return (<AppShell role="admin" email={user.email} tableName={selectedTableName}>
-      <AdminDashboard initialItems={initialItems} initialSection={selectedSection} initialTableName={selectedTableName} tableNames={tableNames}/>
+      <AdminDashboard email={user.email} initialItems={initialItems} initialSection={selectedSection} initialTableName={selectedTableName} tableNames={tableNames}/>
     </AppShell>);
 }

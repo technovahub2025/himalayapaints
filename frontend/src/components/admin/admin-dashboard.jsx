@@ -1,17 +1,456 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, Clock3, Plus, RefreshCw, Save, Search, Trash2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Activity, BarChart3, Clock3, Layers3, Package2, Plus, RefreshCw, Save, Search, Sparkles, Trash2, TrendingUp, WalletCards } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/services/api-client";
 import { Badge, Button, Card, CardBody, CardHeader, Input, Label, Select, Subtitle, Title } from "@/components/ui";
-import { SummaryCards } from "@/components/summary-cards";
 import { formatProductLabel } from "@/lib/product-label";
+import { useAuthSessionContext } from "@/components/providers";
 
 const EMPTY_TABLE_FORM = { name: "", duplicateFrom: "" };
 const EMPTY_MATERIAL_FORM = { code: "", name: "", rate: "" };
+const NUMBER_FORMAT = new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 2
+});
 
 function normalizeCode(value) {
     return String(value ?? "").trim().toLowerCase();
+}
+
+function normalizeDateValue(value) {
+    if (!value) {
+        return null;
+    }
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getDateKey(value) {
+    const date = normalizeDateValue(value);
+    return date ? date.toISOString().slice(0, 10) : "";
+}
+
+function formatShortDate(value) {
+    const date = normalizeDateValue(value);
+    return date ? date.toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) : "-";
+}
+
+function formatAmount(value) {
+    return NUMBER_FORMAT.format(Number(value ?? 0));
+}
+
+function withinDateRange(value, start, end) {
+    const date = normalizeDateValue(value);
+    if (!date) {
+        return false;
+    }
+    if (start && date < start) {
+        return false;
+    }
+    if (end) {
+        const inclusiveEnd = new Date(end);
+        inclusiveEnd.setHours(23, 59, 59, 999);
+        if (date > inclusiveEnd) {
+            return false;
+        }
+    }
+    return true;
+}
+
+function getPresetDateRange(preset) {
+    if (!preset || preset === "all" || preset === "custom") {
+        return { start: null, end: null };
+    }
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+    const start = new Date(end);
+    if (preset === "today") {
+        start.setHours(0, 0, 0, 0);
+    }
+    else if (preset === "week") {
+        start.setDate(start.getDate() - 6);
+        start.setHours(0, 0, 0, 0);
+    }
+    else if (preset === "month") {
+        start.setDate(start.getDate() - 29);
+        start.setHours(0, 0, 0, 0);
+    }
+    else if (preset === "year") {
+        start.setDate(start.getDate() - 364);
+        start.setHours(0, 0, 0, 0);
+    }
+    return { start, end };
+}
+
+function getSalesValue(record) {
+    const candidates = [record?.totalSales, record?.salesAmount, record?.saleAmount, record?.sales, record?.revenue];
+    for (const candidate of candidates) {
+        const value = typeof candidate === "object" && candidate !== null ? candidate.amount : candidate;
+        if (value !== undefined && value !== null && value !== "" && Number.isFinite(Number(value))) {
+            return Number(value);
+        }
+    }
+    return null;
+}
+
+function sum(values) {
+    return values.reduce((total, value) => total + Number(value ?? 0), 0);
+}
+
+function buildSeries(records, getKey, getValue, limit = Infinity) {
+    const grouped = new Map();
+    for (const record of records) {
+        const key = getKey(record);
+        if (!key) {
+            continue;
+        }
+        grouped.set(key, (grouped.get(key) ?? 0) + Number(getValue(record) ?? 0));
+    }
+    return Array.from(grouped.entries())
+        .map(([label, value]) => ({ label, value: Number(value.toFixed(2)) }))
+        .sort((left, right) => right.value - left.value || left.label.localeCompare(right.label))
+        .slice(0, limit);
+}
+
+function buildTrendSeries(records, getDate, getValue) {
+    const grouped = new Map();
+    for (const record of records) {
+        const key = getDateKey(getDate(record));
+        if (!key) {
+            continue;
+        }
+        grouped.set(key, (grouped.get(key) ?? 0) + Number(getValue(record) ?? 0));
+    }
+    return Array.from(grouped.entries())
+        .map(([key, value]) => ({
+        key,
+        label: formatShortDate(key),
+        value: Number(value.toFixed(2))
+    }))
+        .sort((left, right) => left.key.localeCompare(right.key));
+}
+
+function createPolylinePoints(series, width, height, padding) {
+    if (series.length === 0) {
+        return "";
+    }
+    if (series.length === 1) {
+        const singleX = width / 2;
+        const singleY = height - padding.bottom;
+        return `${singleX},${singleY}`;
+    }
+    const values = series.map((entry) => Number(entry.value ?? 0));
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const span = max - min || 1;
+    const xStep = (width - padding.left - padding.right) / (series.length - 1);
+    return series.map((entry, index) => {
+        const x = padding.left + index * xStep;
+        const normalized = (Number(entry.value ?? 0) - min) / span;
+        const y = height - padding.bottom - normalized * (height - padding.top - padding.bottom);
+        return `${x},${y}`;
+    }).join(" ");
+}
+
+function MetricCard({ icon: Icon, label, value, hint, accent = "from-teal-50 to-white" }) {
+    return (
+        <Card className="overflow-hidden border-slate-200/80 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.45)]">
+            <CardBody className={`bg-gradient-to-br ${accent} p-4 sm:p-5`}>
+                <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
+                        <p className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">{value}</p>
+                        <p className="text-xs leading-5 text-slate-500 sm:text-sm">{hint}</p>
+                    </div>
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-white shadow-lg shadow-slate-950/15">
+                        <Icon className="h-5 w-5" />
+                    </div>
+                </div>
+            </CardBody>
+        </Card>
+    );
+}
+
+function ChartFrame({ title, subtitle, badge, icon: Icon, children, className = "" }) {
+    return (
+        <Card className={`overflow-hidden border-slate-200/80 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.45)] ${className}`}>
+            <CardHeader className="border-b border-slate-200/80 bg-white/90">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                            {Icon ? (
+                                <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-teal-50 text-teal-700">
+                                    <Icon className="h-4 w-4" />
+                                </span>
+                            ) : null}
+                            <p className="text-base font-semibold text-slate-950 sm:text-lg">{title}</p>
+                        </div>
+                        <p className="text-sm text-slate-500">{subtitle}</p>
+                    </div>
+                    {badge ? <Badge className="self-start">{badge}</Badge> : null}
+                </div>
+            </CardHeader>
+            <CardBody className="bg-[linear-gradient(180deg,rgba(15,118,110,0.03),rgba(255,255,255,1))] p-4 sm:p-5">
+                {children}
+            </CardBody>
+        </Card>
+    );
+}
+
+function HorizontalBarChart({ data, emptyLabel, valueLabel }) {
+    if (data.length === 0) {
+        return <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-500">{emptyLabel}</div>;
+    }
+    const max = Math.max(...data.map((item) => Number(item.value ?? 0)), 1);
+    return (
+        <div className="space-y-3">
+            {data.map((item) => {
+                const width = `${Math.max(8, (Number(item.value ?? 0) / max) * 100)}%`;
+                return (
+                    <div key={item.label} className="space-y-1.5">
+                        <div className="flex items-center justify-between gap-3 text-sm">
+                            <p className="truncate font-medium text-slate-700">{item.label}</p>
+                            <p className="shrink-0 font-semibold text-slate-950">{formatAmount(item.value)} {valueLabel}</p>
+                        </div>
+                        <div className="h-2.5 rounded-full bg-slate-100">
+                            <div className="h-2.5 rounded-full bg-gradient-to-r from-teal-500 via-emerald-500 to-cyan-500" style={{ width }} />
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+function TrendChart({ series, colorClass = "stroke-teal-500", emptyLabel = "No data for the selected filters." }) {
+    if (series.length === 0) {
+        return <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-500">{emptyLabel}</div>;
+    }
+    const width = 720;
+    const height = 280;
+    const padding = { top: 24, right: 24, bottom: 42, left: 24 };
+    const points = createPolylinePoints(series, width, height, padding);
+    const values = series.map((entry) => Number(entry.value ?? 0));
+    const maxValue = Math.max(...values, 1);
+    const labelStep = series.length > 8 ? Math.ceil(series.length / 6) : 1;
+    return (
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            <svg viewBox={`0 0 ${width} ${height}`} className="h-[250px] w-full">
+                <defs>
+                    <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="rgba(13,148,136,0.28)" />
+                        <stop offset="100%" stopColor="rgba(13,148,136,0.02)" />
+                    </linearGradient>
+                </defs>
+                {[0.25, 0.5, 0.75, 1].map((fraction) => {
+                    const y = padding.top + (height - padding.top - padding.bottom) * fraction;
+                    return <line key={fraction} x1={padding.left} x2={width - padding.right} y1={y} y2={y} stroke="rgba(148,163,184,0.22)" strokeDasharray="4 6" />;
+                })}
+                <polygon points={`${points} ${width - padding.right},${height - padding.bottom} ${padding.left},${height - padding.bottom}`} fill="url(#chartFill)" stroke="none" />
+                <polyline points={points} fill="none" className={`stroke-[3] ${colorClass}`} strokeLinecap="round" strokeLinejoin="round" />
+                {series.map((entry, index) => {
+                    const xStep = series.length > 1 ? (width - padding.left - padding.right) / (series.length - 1) : 0;
+                    const x = series.length === 1 ? width / 2 : padding.left + index * xStep;
+                    const span = maxValue || 1;
+                    const y = height - padding.bottom - (Number(entry.value ?? 0) / span) * (height - padding.top - padding.bottom);
+                    const showLabel = index === 0 || index === series.length - 1 || index % labelStep === 0;
+                    return (
+                        <g key={entry.key ?? entry.label}>
+                            <circle cx={x} cy={y} r="5" fill="white" stroke="rgb(15 118 110)" strokeWidth="3" />
+                            {showLabel ? <text x={x} y={height - 14} textAnchor="middle" className="fill-slate-500 text-[11px]">{entry.label}</text> : null}
+                        </g>
+                    );
+                })}
+            </svg>
+        </div>
+    );
+}
+
+function PieChart({ data, emptyLabel, valueLabel = "KG" }) {
+    if (data.length === 0) {
+        return <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-500">{emptyLabel}</div>;
+    }
+    const total = data.reduce((value, entry) => value + Number(entry.value ?? 0), 0);
+    if (total <= 0) {
+        return <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-500">{emptyLabel}</div>;
+    }
+    const colors = ["#0f766e", "#0891b2", "#2563eb", "#7c3aed", "#d97706", "#e11d48"];
+    let offset = 0;
+    const radius = 52;
+    const circumference = 2 * Math.PI * radius;
+    return (
+        <div className="grid items-center gap-5 sm:grid-cols-[minmax(150px,190px)_1fr]">
+            <div className="mx-auto h-44 w-44">
+                <svg viewBox="0 0 140 140" className="h-full w-full -rotate-90">
+                    <circle cx="70" cy="70" r={radius} fill="transparent" stroke="#e2e8f0" strokeWidth="24" />
+                    {data.map((entry, index) => {
+                        const length = (Number(entry.value ?? 0) / total) * circumference;
+                        const dash = `${length} ${circumference - length}`;
+                        const circle = <circle key={entry.label} cx="70" cy="70" r={radius} fill="transparent" stroke={colors[index % colors.length]} strokeWidth="24" strokeDasharray={dash} strokeDashoffset={-offset} />;
+                        offset += length;
+                        return circle;
+                    })}
+                    <circle cx="70" cy="70" r="38" fill="white" />
+                </svg>
+            </div>
+            <div className="space-y-2">
+                {data.map((entry, index) => (
+                    <div key={entry.label} className="flex items-center justify-between gap-3 text-sm">
+                        <div className="flex min-w-0 items-center gap-2">
+                            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: colors[index % colors.length] }} />
+                            <span className="truncate text-slate-600">{entry.label}</span>
+                        </div>
+                        <span className="shrink-0 font-semibold text-slate-950">{formatAmount(entry.value)} {valueLabel}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function AdminSettings({ email }) {
+    const navigate = useNavigate();
+    const authSession = useAuthSessionContext();
+    const [users, setUsers] = useState([]);
+    const [selectedUserId, setSelectedUserId] = useState("");
+    const [userEmail, setUserEmail] = useState(email || "");
+    const [newPassword, setNewPassword] = useState("");
+    const [confirmPassword, setConfirmPassword] = useState("");
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+
+    async function loadUsers() {
+        setLoading(true);
+        try {
+            const data = await apiFetch("/api/admin/users");
+            const nextUsers = Array.isArray(data.users) ? data.users : [];
+            setUsers(nextUsers);
+            const current = nextUsers.find((user) => user.email === email) ?? nextUsers[0];
+            if (current) {
+                setSelectedUserId(String(current._id));
+                setUserEmail(current.email);
+            }
+        }
+        catch (error) {
+            toast.error(error instanceof Error ? error.message : "Unable to load users");
+        }
+        finally {
+            setLoading(false);
+        }
+    }
+
+    useEffect(() => {
+        void loadUsers();
+    }, [email]);
+
+    function selectUser(userId) {
+        const user = users.find((entry) => String(entry._id) === userId);
+        setSelectedUserId(userId);
+        setUserEmail(user?.email ?? "");
+        setNewPassword("");
+        setConfirmPassword("");
+    }
+
+    async function saveUser(event) {
+        event.preventDefault();
+        const target = users.find((user) => String(user._id) === selectedUserId);
+        const normalizedEmail = userEmail.trim().toLowerCase();
+        if (!target) {
+            toast.error("Select a user account first");
+            return;
+        }
+        if (!normalizedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+            toast.error("Enter a valid user ID/email");
+            return;
+        }
+        if (!newPassword && normalizedEmail === target.email) {
+            toast.error("Change the user ID/email or enter a new password");
+            return;
+        }
+        if (newPassword.length > 0 && newPassword.length < 6) {
+            toast.error("Password must be at least 6 characters");
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            toast.error("Passwords do not match");
+            return;
+        }
+        setSaving(true);
+        try {
+            const data = await apiFetch(`/api/admin/users/${encodeURIComponent(selectedUserId)}`, {
+                method: "PATCH",
+                json: { email: normalizedEmail, newPassword }
+            });
+            toast.success(`Account updated for ${data.user?.email ?? normalizedEmail}`);
+            setNewPassword("");
+            setConfirmPassword("");
+            if (data.requiresRelogin) {
+                await apiFetch("/api/auth/logout", { method: "POST" });
+                await authSession?.refreshSession?.();
+                navigate("/login", { replace: true });
+                return;
+            }
+            await loadUsers();
+        }
+        catch (error) {
+            toast.error(error instanceof Error ? error.message : "Unable to update account");
+        }
+        finally {
+            setSaving(false);
+        }
+    }
+
+    return (
+        <div className="space-y-6">
+            <section className="rounded-[2rem] border border-slate-200/80 bg-[radial-gradient(circle_at_top_left,rgba(13,148,136,0.14),transparent_35%),linear-gradient(135deg,rgba(255,255,255,0.98),rgba(236,254,255,0.92))] p-5 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)] sm:p-7">
+                <Badge className="border border-teal-100 bg-white/80 text-teal-700">Admin settings</Badge>
+                <Title className="mt-3 text-3xl sm:text-4xl">Admin Control Center</Title>
+                <Subtitle className="max-w-2xl">Manage account IDs and passwords securely. Passwords are never displayed or returned to the browser.</Subtitle>
+            </section>
+            <Card>
+                <CardHeader>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <p className="text-lg font-semibold text-slate-950">Account access</p>
+                            <p className="text-sm text-slate-500">Update your own account or an existing user account.</p>
+                        </div>
+                        <Badge>{users.length.toLocaleString()} account(s)</Badge>
+                    </div>
+                </CardHeader>
+                <CardBody>
+                    {loading ? <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-sm text-slate-500">Loading account list...</div> : users.length === 0 ? <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-sm text-slate-500">No user accounts are available.</div> : (
+                        <form className="space-y-5" onSubmit={saveUser}>
+                            <div className="grid gap-4 lg:grid-cols-2">
+                                <div>
+                                    <Label htmlFor="admin-settings-user">Account</Label>
+                                    <Select id="admin-settings-user" value={selectedUserId} onChange={(event) => selectUser(event.target.value)} disabled={saving}>
+                                        {users.map((user) => <option key={user._id} value={user._id}>{user.email} ({user.role})</option>)}
+                                    </Select>
+                                </div>
+                                <div>
+                                    <Label htmlFor="admin-settings-email">User ID / Email</Label>
+                                    <Input id="admin-settings-email" type="email" value={userEmail} onChange={(event) => setUserEmail(event.target.value)} autoComplete="username" disabled={saving} />
+                                </div>
+                                <div>
+                                    <Label htmlFor="admin-settings-password">New Password</Label>
+                                    <Input id="admin-settings-password" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} autoComplete="new-password" placeholder="Leave blank to keep current password" disabled={saving} />
+                                </div>
+                                <div>
+                                    <Label htmlFor="admin-settings-confirm-password">Confirm New Password</Label>
+                                    <Input id="admin-settings-confirm-password" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" placeholder="Repeat new password" disabled={saving} />
+                                </div>
+                            </div>
+                            <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                                <p className="text-xs leading-5 text-slate-500">Minimum password length: 6 characters. Changing your own account will require signing in again.</p>
+                                <Button type="submit" disabled={saving}>{saving ? "Saving..." : "Save account changes"}</Button>
+                            </div>
+                        </form>
+                    )}
+                </CardBody>
+            </Card>
+        </div>
+    );
 }
 
 function createItemDraft(item) {
@@ -26,7 +465,11 @@ function formatDateTime(value) {
     return value ? new Date(value).toLocaleString() : "-";
 }
 
-export function AdminDashboard({ initialItems, initialTableName, tableNames, email }) {
+export function AdminDashboard({ initialItems, initialTableName, tableNames, email, initialSection = "dashboard" }) {
+    const navigate = useNavigate();
+    const activeSection = ["workspace", "dashboard", "products", "rawMaterials", "production", "settings"].includes(initialSection)
+        ? initialSection
+        : "dashboard";
     const [selectedTableName, setSelectedTableName] = useState(initialTableName);
     const [tableOptions, setTableOptions] = useState(Array.from(new Set([initialTableName, ...tableNames.filter(Boolean)])).sort());
     const [itemRows, setItemRows] = useState(() => initialItems.map(createItemDraft));
@@ -41,6 +484,11 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
     const [tableForm, setTableForm] = useState(EMPTY_TABLE_FORM);
     const [materialForm, setMaterialForm] = useState(EMPTY_MATERIAL_FORM);
     const [materialRateDrafts, setMaterialRateDrafts] = useState({});
+    const [analyticsDatePreset, setAnalyticsDatePreset] = useState("all");
+    const [analyticsDateFrom, setAnalyticsDateFrom] = useState("");
+    const [analyticsDateTo, setAnalyticsDateTo] = useState("");
+    const [analyticsProductFilter, setAnalyticsProductFilter] = useState("");
+    const [analyticsMaterialFilter, setAnalyticsMaterialFilter] = useState("");
 
     const materialMap = useMemo(() => {
         return new Map(rawMaterials.map((material) => [normalizeCode(material.code), material]));
@@ -74,8 +522,95 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
     const currentQuantityTotal = useMemo(() => selectedTableItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0), [selectedTableItems]);
     const currentAmountTotal = useMemo(() => selectedTableItems.reduce((sum, item) => sum + Number(item.amount || 0), 0), [selectedTableItems]);
     const selectedTableSummary = useMemo(() => tableOptions.find((table) => table === selectedTableName) ?? selectedTableName, [selectedTableName, tableOptions]);
-    const recentBatches = useMemo(() => productionBatches.slice(0, 5), [productionBatches]);
-    const recentProductionTotal = useMemo(() => productionBatches.slice(0, 10).reduce((sum, batch) => sum + Number(batch.actualKg ?? 0), 0), [productionBatches]);
+    const rawMaterialLookup = useMemo(() => {
+        const map = new Map();
+        rawMaterials.forEach((material) => {
+            const codeKey = normalizeCode(material.code);
+            const nameKey = normalizeCode(material.name);
+            if (codeKey) {
+                map.set(codeKey, material);
+            }
+            if (nameKey && !map.has(nameKey)) {
+                map.set(nameKey, material);
+            }
+        });
+        return map;
+    }, [rawMaterials]);
+    const availableProductionProducts = useMemo(() => Array.from(new Set(productionBatches.map((batch) => String(batch.productName ?? "").trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right)), [productionBatches]);
+    const filteredProductionRows = useMemo(() => {
+        const presetRange = getPresetDateRange(analyticsDatePreset);
+        const start = analyticsDatePreset === "custom" ? normalizeDateValue(analyticsDateFrom) : presetRange.start;
+        const end = analyticsDatePreset === "custom" ? normalizeDateValue(analyticsDateTo) : presetRange.end;
+        const productKey = normalizeCode(analyticsProductFilter);
+        const materialKey = normalizeCode(analyticsMaterialFilter);
+        return productionBatches.map((batch) => {
+            const batchDate = normalizeDateValue(batch.createdAt);
+            const lines = Array.isArray(batch.lines) ? batch.lines : [];
+            const resolvedLines = lines.map((line) => {
+                const lineMaterial = rawMaterialLookup.get(normalizeCode(line.materialName)) ?? null;
+                const quantity = Number(line.actualQty ?? line.stdQty ?? 0);
+                const rate = Number(lineMaterial?.rate ?? 0);
+                return {
+                    ...line,
+                    lineMaterial,
+                    quantity,
+                    rate,
+                    amount: Number((quantity * rate).toFixed(2))
+                };
+            });
+            const matchesDate = withinDateRange(batch.createdAt, start, end);
+            const matchesProduct = !productKey || normalizeCode(batch.productName) === productKey;
+            const filteredLines = materialKey
+                ? resolvedLines.filter((line) => {
+                    const keys = [line.lineMaterial?.code, line.lineMaterial?.name, line.materialName].map(normalizeCode);
+                    return keys.includes(materialKey);
+                })
+                : resolvedLines;
+            const matchesMaterial = !materialKey || filteredLines.length > 0;
+            return {
+                ...batch,
+                batchDate,
+                resolvedLines,
+                filteredLines,
+                batchKg: Number(batch.actualKg ?? 0),
+                batchAmount: Number(filteredLines.reduce((total, line) => total + Number(line.amount ?? 0), 0).toFixed(2)),
+                batchSales: getSalesValue(batch),
+                matchesDate,
+                matchesProduct,
+                matchesMaterial
+            };
+        }).filter((batch) => batch.matchesDate && batch.matchesProduct && batch.matchesMaterial);
+    }, [analyticsDateFrom, analyticsDatePreset, analyticsDateTo, analyticsMaterialFilter, analyticsProductFilter, productionBatches, rawMaterialLookup]);
+    const recentBatches = useMemo(() => filteredProductionRows.slice(0, 5), [filteredProductionRows]);
+    const productionTrendSeries = useMemo(() => buildTrendSeries(filteredProductionRows, (batch) => batch.batchDate, (batch) => batch.batchKg), [filteredProductionRows]);
+    const productionByProductSeries = useMemo(() => buildSeries(filteredProductionRows, (batch) => formatProductLabel(batch.productName), (batch) => batch.batchKg, 6), [filteredProductionRows]);
+    const productionShareSeries = useMemo(() => buildSeries(filteredProductionRows, (batch) => formatProductLabel(batch.productName), (batch) => batch.batchKg, 6), [filteredProductionRows]);
+    const productionCostByProductSeries = useMemo(() => buildSeries(filteredProductionRows, (batch) => formatProductLabel(batch.productName), (batch) => batch.batchAmount, 6), [filteredProductionRows]);
+    const topSellingProductsSeries = useMemo(() => {
+        if (!filteredProductionRows.some((batch) => batch.batchSales !== null)) {
+            return [];
+        }
+        return buildSeries(filteredProductionRows.filter((batch) => batch.batchSales !== null), (batch) => formatProductLabel(batch.productName), (batch) => batch.batchSales, 6);
+    }, [filteredProductionRows]);
+    const rawMaterialUsageSeries = useMemo(() => buildSeries(filteredProductionRows.flatMap((batch) => batch.filteredLines.map((line) => ({
+        lineMaterial: line.lineMaterial,
+        materialName: line.materialName,
+        quantity: Number(line.quantity ?? 0)
+    }))), (line) => line.lineMaterial?.name || line.materialName, (line) => line.quantity, 6), [filteredProductionRows]);
+    const analyticsTotals = useMemo(() => {
+        const hasFilters = analyticsDatePreset !== "all" || analyticsProductFilter || analyticsMaterialFilter;
+        const filteredProductNames = new Set(filteredProductionRows.map((batch) => normalizeCode(batch.productName)).filter(Boolean));
+        const filteredMaterialNames = new Set(filteredProductionRows.flatMap((batch) => batch.filteredLines.map((line) => normalizeCode(line.lineMaterial?.code || line.lineMaterial?.name || line.materialName))).filter(Boolean));
+        const salesRows = filteredProductionRows.filter((batch) => batch.batchSales !== null);
+        return {
+            products: hasFilters ? filteredProductNames.size : Array.from(new Set(tableOptions.filter(Boolean))).length,
+            materials: hasFilters ? filteredMaterialNames.size : rawMaterials.length,
+            production: filteredProductionRows.length,
+            kg: filteredProductionRows.length > 0 ? sum(filteredProductionRows.map((batch) => batch.batchKg)) : null,
+            amount: filteredProductionRows.length > 0 ? sum(filteredProductionRows.map((batch) => batch.batchAmount)) : null,
+            sales: salesRows.length > 0 ? sum(salesRows.map((batch) => batch.batchSales)) : null
+        };
+    }, [analyticsDatePreset, analyticsMaterialFilter, analyticsProductFilter, filteredProductionRows, rawMaterials.length, tableOptions]);
 
     useEffect(() => {
         setSelectedTableName(initialTableName);
@@ -129,10 +664,28 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
         }
     }
 
+    async function loadAnalyticsData() {
+        setLoading(true);
+        try {
+            const [materialsData, productionData] = await Promise.all([
+                apiFetch("/api/admin/raw-materials?limit=100"),
+                apiFetch("/api/production")
+            ]);
+            setRawMaterials(Array.isArray(materialsData.materials) ? materialsData.materials : []);
+            setProductionBatches(Array.isArray(productionData.batches) ? productionData.batches : []);
+        }
+        catch (error) {
+            toast.error(error instanceof Error ? error.message : "Failed to load analytics data");
+        }
+        finally {
+            setLoading(false);
+        }
+    }
+
     useEffect(() => {
-        void loadDashboardData(initialTableName);
-        // The admin dashboard keeps its own copy so it can react to in-page edits.
-        // The parent page still handles auth and initial loading.
+        void loadAnalyticsData();
+        // The parent already fetched the initial table/items payload. Fetch only
+        // analytics data here; workspace refreshes fetch the complete payload.
     }, []);
 
     function handleItemChange(index, field, value) {
@@ -388,63 +941,223 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
         });
     }
 
-    const overviewCards = [
+    const kpiCards = [
         {
-            label: "Tables",
-            value: String(tableOptions.length),
-            hint: "Available product tables"
-        },
-        {
-            label: "Current Items",
-            value: String(itemRows.length),
-            hint: `Selected table: ${selectedTableSummary}`
+            label: "Total Products",
+            value: formatAmount(analyticsTotals.products),
+            hint: "Unique product tables available in the backend",
+            icon: Package2,
+            accent: "from-cyan-50 to-white"
         },
         {
             label: "Raw Materials",
-            value: String(rawMaterials.length),
-            hint: "Master data available for item formulas"
+            value: formatAmount(analyticsTotals.materials),
+            hint: "Master raw materials currently stored",
+            icon: Layers3,
+            accent: "from-emerald-50 to-white"
         },
         {
-            label: "Recent Output",
-            value: `${recentProductionTotal.toLocaleString()} KG`,
-            hint: "Last 10 production batches"
+            label: "Production Batches",
+            value: formatAmount(analyticsTotals.production),
+            hint: "Production batches matching the active filters",
+            icon: Activity,
+            accent: "from-sky-50 to-white"
+        },
+        {
+            label: "Total KG",
+            value: analyticsTotals.kg === null ? "—" : `${formatAmount(analyticsTotals.kg)} KG`,
+            hint: "Filtered production weight from live batches",
+            icon: TrendingUp,
+            accent: "from-teal-50 to-white"
+        },
+        {
+            label: "Total Cost",
+            value: analyticsTotals.amount === null ? "—" : formatAmount(analyticsTotals.amount),
+            hint: "Formula-derived production cost from live material rates",
+            icon: Sparkles,
+            accent: "from-amber-50 to-white"
+        },
+        {
+            label: "Total Sales",
+            value: analyticsTotals.sales === null ? "—" : formatAmount(analyticsTotals.sales),
+            hint: analyticsTotals.sales === null ? "Sales data is not available in the current API" : "Sales from live production records",
+            icon: WalletCards,
+            accent: "from-violet-50 to-white"
         }
     ];
 
     return (
-        <div className="space-y-6">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-                <div className="max-w-3xl">
-                    <Title>Admin Control Center</Title>
-                    <Subtitle>Manage product tables, item formulas, raw materials, and production history from one workspace.</Subtitle>
-                    {email ? <p className="mt-2 text-sm text-muted">Signed in as {email}</p> : null}
+        <div className="space-y-6 sm:space-y-7">
+            {activeSection === "settings" ? <AdminSettings email={email} /> : null}
+            {activeSection !== "settings" ? <>
+            {activeSection === "dashboard" ? <>
+            <section className="overflow-hidden rounded-[2rem] border border-slate-200/80 bg-[radial-gradient(circle_at_top_left,rgba(13,148,136,0.14),transparent_35%),linear-gradient(135deg,rgba(255,255,255,0.98),rgba(236,254,255,0.92))] shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)]">
+                <div className="p-5 sm:p-6 lg:p-7">
+                    <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+                        <div className="max-w-4xl space-y-3">
+                            <Badge className="w-fit rounded-full border border-teal-100 bg-white/80 px-4 py-1.5 text-[0.65rem] uppercase tracking-[0.18em] text-teal-700">
+                                <Sparkles className="mr-2 h-3.5 w-3.5" />
+                                Live analytics
+                            </Badge>
+                            <Title className="text-3xl sm:text-4xl">Production Intelligence Dashboard</Title>
+                            <Subtitle className="max-w-3xl text-sm leading-6 text-slate-600 sm:text-base">
+                                Real data from the existing API powers production trends, material usage, and cost views across your product tables, raw materials, and batch history.
+                            </Subtitle>
+                            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+                                <Badge className="rounded-full bg-white px-3 py-1 text-slate-700">{filteredProductionRows.length.toLocaleString()} filtered batch(es)</Badge>
+                                {email ? <span className="rounded-full border border-slate-200 bg-white/70 px-3 py-1">Signed in as {email}</span> : null}
+                            </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2 sm:gap-3">
+                            <Button variant="secondary" onClick={refreshTable} disabled={loading || savingItems || savingTable || savingMaterial}>
+                                <RefreshCw className="mr-2 h-4 w-4" />
+                                Refresh
+                            </Button>
+                            <Button variant="primary" onClick={saveItems} disabled={loading || savingItems}>
+                                <Save className="mr-2 h-4 w-4" />
+                                Save Items
+                            </Button>
+                        </div>
+                    </div>
+
+                    <div className="mt-6 grid gap-4 xl:grid-cols-[1.35fr_1fr]">
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                            <div>
+                                <Label>Date Range</Label>
+                                <Select value={analyticsDatePreset} onChange={(event) => setAnalyticsDatePreset(event.target.value)}>
+                                    <option value="all">All time</option>
+                                    <option value="today">Today</option>
+                                    <option value="week">Week</option>
+                                    <option value="month">Month</option>
+                                    <option value="year">Year</option>
+                                    <option value="custom">Custom Date</option>
+                                </Select>
+                            </div>
+                            <div>
+                                <Label>Product</Label>
+                                <Select value={analyticsProductFilter} onChange={(event) => setAnalyticsProductFilter(event.target.value)}>
+                                    <option value="">All products</option>
+                                    {availableProductionProducts.map((product) => (
+                                        <option key={product} value={product}>
+                                            {formatProductLabel(product)}
+                                        </option>
+                                    ))}
+                                </Select>
+                            </div>
+                            <div>
+                                <Label>Raw Material</Label>
+                                <Select value={analyticsMaterialFilter} onChange={(event) => setAnalyticsMaterialFilter(event.target.value)}>
+                                    <option value="">All materials</option>
+                                    {rawMaterials.map((material) => (
+                                        <option key={material.code} value={material.code}>
+                                            {material.code} {material.name ? `- ${material.name}` : ""}
+                                        </option>
+                                    ))}
+                                </Select>
+                            </div>
+                            {analyticsDatePreset === "custom" ? <>
+                                <div>
+                                    <Label>Date From</Label>
+                                    <Input type="date" value={analyticsDateFrom} onChange={(event) => setAnalyticsDateFrom(event.target.value)} />
+                                </div>
+                                <div>
+                                    <Label>Date To</Label>
+                                    <Input type="date" value={analyticsDateTo} onChange={(event) => setAnalyticsDateTo(event.target.value)} />
+                                </div>
+                            </> : null}
+                        </div>
+                        <div className="rounded-3xl border border-slate-200/80 bg-white/80 p-4 shadow-sm">
+                            <div className="flex items-start justify-between gap-4">
+                                <div>
+                                    <p className="text-sm font-semibold text-slate-950">Filter context</p>
+                                    <p className="mt-1 text-sm text-slate-500">
+                                        {analyticsDatePreset !== "all" || analyticsProductFilter || analyticsMaterialFilter
+                                            ? "Analytics and KPIs are filtered to the selected slice of live data."
+                                            : "Showing all production records from the current API response."}
+                                    </p>
+                                </div>
+                                <Button
+                                    variant="ghost"
+                                    onClick={() => {
+                                        setAnalyticsDateFrom("");
+                                        setAnalyticsDateTo("");
+                                        setAnalyticsDatePreset("all");
+                                        setAnalyticsProductFilter("");
+                                        setAnalyticsMaterialFilter("");
+                                    }}
+                                >
+                                    Clear filters
+                                </Button>
+                            </div>
+                            <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                                <div className="rounded-2xl bg-slate-50 p-3">
+                                    <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Products</p>
+                                    <p className="mt-1 font-semibold text-slate-950">{availableProductionProducts.length.toLocaleString()}</p>
+                                </div>
+                                <div className="rounded-2xl bg-slate-50 p-3">
+                                    <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Materials</p>
+                                    <p className="mt-1 font-semibold text-slate-950">{rawMaterials.length.toLocaleString()}</p>
+                                </div>
+                                <div className="rounded-2xl bg-slate-50 p-3">
+                                    <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Batches</p>
+                                    <p className="mt-1 font-semibold text-slate-950">{filteredProductionRows.length.toLocaleString()}</p>
+                                </div>
+                                <div className="rounded-2xl bg-slate-50 p-3">
+                                    <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Latest refresh</p>
+                                    <p className="mt-1 font-semibold text-slate-950">{loading ? "Loading..." : "Live"}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                    <Button variant="secondary" onClick={refreshTable} disabled={loading || savingItems || savingTable || savingMaterial}>
-                        <RefreshCw className="mr-2 h-4 w-4" />
-                        Refresh
-                    </Button>
-                    <Button variant="primary" onClick={saveItems} disabled={loading || savingItems}>
-                        <Save className="mr-2 h-4 w-4" />
-                        Save Items
-                    </Button>
-                </div>
+            </section>
+
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                {kpiCards.map((card) => (
+                    <MetricCard key={card.label} {...card} />
+                ))}
             </div>
 
-            <SummaryCards items={overviewCards} />
+            <div className="grid gap-6 xl:grid-cols-12">
+                <ChartFrame title="Production Trend" subtitle="Production KG over time from the filtered batch set." badge={`${productionTrendSeries.length.toLocaleString()} point(s)`} icon={TrendingUp} className="xl:col-span-7">
+                    <TrendChart series={productionTrendSeries} />
+                </ChartFrame>
 
-            <Card>
-                <CardHeader>
+                <ChartFrame title="Production by Product" subtitle="Top products ranked by produced KG." badge="Top 6" icon={Package2} className="xl:col-span-5">
+                    <HorizontalBarChart data={productionByProductSeries} emptyLabel="No production data is available for the current filters." valueLabel="KG" />
+                </ChartFrame>
+
+                <ChartFrame title="Raw Material Usage" subtitle="Share of material usage from production lines." badge="Top 6" icon={Layers3} className="xl:col-span-6">
+                    <PieChart data={rawMaterialUsageSeries} emptyLabel="No raw material usage is available for the current filters." />
+                </ChartFrame>
+
+                <ChartFrame title="Product Production Share" subtitle="Share of total production KG by product." badge="Top 6" icon={Package2} className="xl:col-span-6">
+                    <PieChart data={productionShareSeries} emptyLabel="No product production data is available for the current filters." />
+                </ChartFrame>
+
+                <ChartFrame title="Production Cost by Product" subtitle="Formula-derived cost by product using current raw-material rates." badge="Top 6" icon={Sparkles} className="xl:col-span-6">
+                    <HorizontalBarChart data={productionCostByProductSeries} emptyLabel="No production cost data is available for the current filters." valueLabel="amount" />
+                </ChartFrame>
+
+                <ChartFrame title="Top Selling Products" subtitle="Shown only when sales data is supplied by the API." badge={topSellingProductsSeries.length > 0 ? "Top 6" : "Unavailable"} icon={WalletCards} className="xl:col-span-6">
+                    <HorizontalBarChart data={topSellingProductsSeries} emptyLabel="Sales data is not available in the current API response." valueLabel="amount" />
+                </ChartFrame>
+            </div>
+            </> : null}
+
+            {activeSection === "products" ? <>
+            <Card className="overflow-hidden border-slate-200/80 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.45)]">
+                <CardHeader className="border-b border-slate-200/80 bg-white/90">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                            <p className="text-lg font-semibold text-ink">Table Workspace</p>
-                            <p className="text-sm text-muted">Select a table, edit its items, or create a new table from an existing template.</p>
+                            <p className="text-lg font-semibold text-slate-950">Table Workspace</p>
+                            <p className="text-sm text-slate-500">Select a table, edit its items, or create a new table from an existing template.</p>
                         </div>
                         <Badge>{selectedTableSummary}</Badge>
                     </div>
                 </CardHeader>
-                <CardBody className="space-y-5">
-                    <div className="grid gap-4 xl:grid-cols-[1.3fr_1fr_1fr]">
+                <CardBody className="space-y-5 p-4 sm:p-6">
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[1.3fr_1fr_1fr]">
                         <div>
                             <Label>Active table</Label>
                             <Select value={selectedTableName} onChange={(event) => {
@@ -475,7 +1188,7 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                             </Select>
                         </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2 sm:gap-3">
                         <Button variant="secondary" onClick={createTable} disabled={savingTable}>
                             <Plus className="mr-2 h-4 w-4" />
                             Create Table
@@ -492,12 +1205,12 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                 </CardBody>
             </Card>
 
-            <Card>
-                <CardHeader>
+            <Card className="overflow-hidden border-slate-200/80 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.45)]">
+                <CardHeader className="border-b border-slate-200/80 bg-white/90">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                            <p className="text-lg font-semibold text-ink">Item Formulas</p>
-                            <p className="text-sm text-muted">Edit item codes and quantities for the active table. The backend will resolve the material names and rates.</p>
+                            <p className="text-lg font-semibold text-slate-950">Item Formulas</p>
+                            <p className="text-sm text-slate-500">Edit item codes and quantities for the active table. The backend will resolve the material names and rates.</p>
                         </div>
                         <div className="flex items-center gap-2">
                             <Badge>{currentQuantityTotal.toLocaleString()} total qty</Badge>
@@ -505,17 +1218,69 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                         </div>
                     </div>
                 </CardHeader>
-                <CardBody className="space-y-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                        <p className="text-sm text-muted">{itemRows.length.toLocaleString()} editable row(s)</p>
+                <CardBody className="space-y-4 p-4 sm:p-6">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-sm text-slate-500">{itemRows.length.toLocaleString()} editable row(s)</p>
                         <Button variant="secondary" onClick={addItemRow}>
                             <Plus className="mr-2 h-4 w-4" />
                             Add Row
                         </Button>
                     </div>
-                    <div className="overflow-x-auto rounded-2xl border border-line bg-white">
-                        <table className="min-w-[980px] w-full border-collapse">
-                            <thead className="bg-slate-50 text-left text-xs uppercase tracking-[0.14em] text-muted">
+                    <div className="grid gap-3 md:hidden">
+                        {itemRows.length > 0 ? itemRows.map((row, index) => {
+                            const material = materialMap.get(normalizeCode(row.code)) ?? null;
+                            const rowRate = Number(material?.rate ?? 0);
+                            const rowQuantity = Number(row.quantity || 0);
+                            const amount = Number((rowRate * rowQuantity).toFixed(2));
+                            return (
+                                <div key={row.id || `${selectedTableName}-${index}`} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Item</p>
+                                            <p className="mt-1 text-sm font-semibold text-slate-950">{material ? material.name : "Select a code"}</p>
+                                            <p className="mt-1 text-xs text-slate-500">{row.code || "No code"}</p>
+                                        </div>
+                                        <Button variant="ghost" onClick={() => removeItemRow(index)} className="shrink-0">
+                                            <Trash2 className="mr-2 h-4 w-4" />
+                                            Remove
+                                        </Button>
+                                    </div>
+                                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                                        <div>
+                                            <Label>Code</Label>
+                                            <Select value={row.code} onChange={(event) => handleItemChange(index, "code", event.target.value)}>
+                                                <option value="">Select code</option>
+                                                {rawMaterials.map((materialOption) => (
+                                                    <option key={materialOption.code} value={materialOption.code}>
+                                                        {materialOption.code}
+                                                    </option>
+                                                ))}
+                                            </Select>
+                                        </div>
+                                        <div>
+                                            <Label>Quantity</Label>
+                                            <Input value={row.quantity} onChange={(event) => handleItemChange(index, "quantity", event.target.value)} inputMode="decimal" />
+                                        </div>
+                                        <div>
+                                            <Label>Rate</Label>
+                                            <Input value={String(rowRate)} readOnly />
+                                        </div>
+                                        <div>
+                                            <Label>Amount</Label>
+                                            <Input value={String(amount)} readOnly />
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        }) : (
+                            <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
+                                No item rows loaded for this table.
+                            </div>
+                        )}
+                    </div>
+                    <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white hidden md:block">
+                        <table className="min-w-[860px] sm:min-w-[980px] w-full border-collapse">
+                            <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-[0.12em] text-slate-500 sm:text-xs sm:tracking-[0.14em]">
                                 <tr>
                                     <th className="px-4 py-3 font-semibold">Code</th>
                                     <th className="px-4 py-3 font-semibold">Material</th>
@@ -527,81 +1292,83 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                             </thead>
                             <tbody>
                                 {itemRows.length > 0 ? itemRows.map((row, index) => {
-                                const material = materialMap.get(normalizeCode(row.code)) ?? null;
-                                const rowRate = Number(material?.rate ?? 0);
-                                const rowQuantity = Number(row.quantity || 0);
-                                const amount = Number((rowRate * rowQuantity).toFixed(2));
-                                return (
-                                    <tr key={row.id || `${selectedTableName}-${index}`} className="border-t border-line">
-                                        <td className="px-4 py-3">
-                                            <Select value={row.code} onChange={(event) => handleItemChange(index, "code", event.target.value)}>
-                                                <option value="">Select code</option>
-                                                {rawMaterials.map((materialOption) => (
-                                                    <option key={materialOption.code} value={materialOption.code}>
-                                                        {materialOption.code}
-                                                    </option>
-                                                ))}
-                                            </Select>
-                                        </td>
-                                        <td className="px-4 py-3 text-sm font-semibold text-ink">
-                                            {material ? material.name : <span className="text-muted">Select a code</span>}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <Input value={row.quantity} onChange={(event) => handleItemChange(index, "quantity", event.target.value)} inputMode="decimal" />
-                                        </td>
-                                        <td className="px-4 py-3 text-sm text-muted">{rowRate.toLocaleString()}</td>
-                                        <td className="px-4 py-3 text-sm font-semibold text-ink">{amount.toLocaleString()}</td>
-                                        <td className="px-4 py-3 text-right">
-                                            <Button variant="ghost" onClick={() => removeItemRow(index)}>
-                                                <Trash2 className="mr-2 h-4 w-4" />
-                                                Remove
-                                            </Button>
+                                    const material = materialMap.get(normalizeCode(row.code)) ?? null;
+                                    const rowRate = Number(material?.rate ?? 0);
+                                    const rowQuantity = Number(row.quantity || 0);
+                                    const amount = Number((rowRate * rowQuantity).toFixed(2));
+                                    return (
+                                        <tr key={row.id || `${selectedTableName}-${index}`} className="border-t border-slate-200">
+                                            <td className="px-4 py-3">
+                                                <Select value={row.code} onChange={(event) => handleItemChange(index, "code", event.target.value)}>
+                                                    <option value="">Select code</option>
+                                                    {rawMaterials.map((materialOption) => (
+                                                        <option key={materialOption.code} value={materialOption.code}>
+                                                            {materialOption.code}
+                                                        </option>
+                                                    ))}
+                                                </Select>
+                                            </td>
+                                            <td className="px-4 py-3 text-sm font-semibold text-slate-950">
+                                                {material ? material.name : <span className="text-slate-500">Select a code</span>}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <Input value={row.quantity} onChange={(event) => handleItemChange(index, "quantity", event.target.value)} inputMode="decimal" />
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-slate-500">{rowRate.toLocaleString()}</td>
+                                            <td className="px-4 py-3 text-sm font-semibold text-slate-950">{amount.toLocaleString()}</td>
+                                            <td className="px-4 py-3 text-right">
+                                                <Button variant="ghost" onClick={() => removeItemRow(index)}>
+                                                    <Trash2 className="mr-2 h-4 w-4" />
+                                                    Remove
+                                                </Button>
+                                            </td>
+                                        </tr>
+                                    );
+                                }) : (
+                                    <tr>
+                                        <td className="px-4 py-5 text-sm text-slate-500" colSpan={6}>
+                                            No item rows loaded for this table.
                                         </td>
                                     </tr>
-                                );
-                            }) : (
-                                <tr>
-                                    <td className="px-4 py-5 text-sm text-muted" colSpan={6}>
-                                        No item rows loaded for this table.
-                                    </td>
-                                </tr>
-                            )}
+                                )}
                             </tbody>
                         </table>
                     </div>
                 </CardBody>
             </Card>
+            </> : null}
 
-            <div className="grid gap-6 xl:grid-cols-[1fr_1.15fr]">
-                <Card>
-                    <CardHeader>
+            <div className={`grid gap-6 ${activeSection === "rawMaterials" ? "xl:grid-cols-1" : "xl:grid-cols-[1fr_1.15fr]"}`}>
+                {activeSection === "rawMaterials" ? <>
+                <Card className="overflow-hidden border-slate-200/80 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.45)]">
+                    <CardHeader className="border-b border-slate-200/80 bg-white/90">
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <div>
-                                <p className="text-lg font-semibold text-ink">Raw Material Master</p>
-                                <p className="text-sm text-muted">Create new materials, adjust rates, or delete selected rows.</p>
+                                <p className="text-lg font-semibold text-slate-950">Raw Material Master</p>
+                                <p className="text-sm text-slate-500">Create new materials, adjust rates, or delete selected rows.</p>
                             </div>
                             <Badge>{selectedMaterialCodes.length.toLocaleString()} selected</Badge>
                         </div>
                     </CardHeader>
-                    <CardBody className="space-y-4">
-                        <div className="grid gap-3 sm:grid-cols-3">
-                            <div>
-                                <Label>Name</Label>
-                                <Input value={materialForm.name} onChange={(event) => setMaterialForm((current) => ({ ...current, name: event.target.value }))} placeholder="Raw material name" />
-                            </div>
+                    <CardBody className="space-y-4 p-4 sm:p-6">
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                             <div>
                                 <Label>Code</Label>
-                                <Input value={materialForm.code} onChange={(event) => setMaterialForm((current) => ({ ...current, code: event.target.value }))} placeholder="Optional custom code" />
+                                <Input value={materialForm.code} onChange={(event) => setMaterialForm((current) => ({ ...current, code: event.target.value }))} placeholder="Code" />
+                            </div>
+                            <div>
+                                <Label>Material Name</Label>
+                                <Input value={materialForm.name} onChange={(event) => setMaterialForm((current) => ({ ...current, name: event.target.value }))} placeholder="Raw material name" />
                             </div>
                             <div>
                                 <Label>Rate</Label>
                                 <Input value={materialForm.rate} onChange={(event) => setMaterialForm((current) => ({ ...current, rate: event.target.value }))} placeholder="0" inputMode="decimal" />
                             </div>
                         </div>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap gap-2 sm:gap-3">
                             <Button variant="secondary" onClick={createRawMaterial} disabled={savingMaterial}>
                                 <Plus className="mr-2 h-4 w-4" />
-                                Add Material
+                                Add Raw Material
                             </Button>
                             <Button variant="danger" onClick={deleteSelectedMaterials} disabled={savingMaterial}>
                                 <Trash2 className="mr-2 h-4 w-4" />
@@ -609,12 +1376,51 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                             </Button>
                         </div>
                         <div className="relative">
-                            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                             <Input value={materialSearch} onChange={(event) => setMaterialSearch(event.target.value)} placeholder="Search raw materials" className="pl-11" />
                         </div>
-                        <div className="max-h-[520px] overflow-auto rounded-2xl border border-line bg-white">
+                        <div className="grid gap-3 md:hidden">
+                            {filteredMaterials.length > 0 ? filteredMaterials.map((material) => (
+                                <div key={material.code} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Code</p>
+                                            <p className="mt-1 text-sm font-semibold text-slate-950">{material.code}</p>
+                                            <p className="mt-1 text-sm text-slate-700">{material.name}</p>
+                                        </div>
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedMaterialCodes.includes(material.code)}
+                                            onChange={() => toggleMaterialSelection(material.code)}
+                                            className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-600"
+                                        />
+                                    </div>
+                                    <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
+                                        <div>
+                                            <Label>Rate</Label>
+                                            <Input
+                                                value={materialRateDrafts[material.code] ?? ""}
+                                                onChange={(event) => setMaterialRateDrafts((current) => ({ ...current, [material.code]: event.target.value }))}
+                                                inputMode="decimal"
+                                            />
+                                        </div>
+                                        <div className="flex items-end">
+                                            <Button variant="ghost" onClick={() => saveRawMaterialRate(material.code)} disabled={savingMaterial} className="w-full">
+                                                <Save className="mr-2 h-4 w-4" />
+                                                Save
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )) : (
+                                <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
+                                    No raw materials match your search.
+                                </div>
+                            )}
+                        </div>
+                        <div className="w-full max-h-[520px] overflow-x-auto overflow-y-auto overscroll-x-contain rounded-2xl border border-slate-200 bg-white hidden md:block">
                             <table className="min-w-[700px] w-full border-collapse">
-                                <thead className="bg-slate-50 text-left text-xs uppercase tracking-[0.14em] text-muted">
+                                <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-[0.12em] text-slate-500 sm:text-xs sm:tracking-[0.14em]">
                                     <tr>
                                         <th className="px-4 py-3 font-semibold">Select</th>
                                         <th className="px-4 py-3 font-semibold">Code</th>
@@ -625,17 +1431,17 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                                 </thead>
                                 <tbody>
                                     {filteredMaterials.length > 0 ? filteredMaterials.map((material) => (
-                                        <tr key={material.code} className="border-t border-line">
+                                        <tr key={material.code} className="border-t border-slate-200">
                                             <td className="px-4 py-3">
                                                 <input
                                                     type="checkbox"
                                                     checked={selectedMaterialCodes.includes(material.code)}
                                                     onChange={() => toggleMaterialSelection(material.code)}
-                                                    className="h-4 w-4 rounded border-line text-accent focus:ring-accent"
+                                                    className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-600"
                                                 />
                                             </td>
-                                            <td className="px-4 py-3 text-sm font-semibold text-ink">{material.code}</td>
-                                            <td className="px-4 py-3 text-sm text-ink">{material.name}</td>
+                                            <td className="px-4 py-3 text-sm font-semibold text-slate-950">{material.code}</td>
+                                            <td className="px-4 py-3 text-sm text-slate-700">{material.name}</td>
                                             <td className="px-4 py-3">
                                                 <Input
                                                     value={materialRateDrafts[material.code] ?? ""}
@@ -652,7 +1458,7 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                                         </tr>
                                     )) : (
                                         <tr>
-                                            <td className="px-4 py-5 text-sm text-muted" colSpan={5}>
+                                            <td className="px-4 py-5 text-sm text-slate-500" colSpan={5}>
                                                 No raw materials match your search.
                                             </td>
                                         </tr>
@@ -662,21 +1468,51 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                         </div>
                     </CardBody>
                 </Card>
+                </> : null}
 
-                <Card>
-                    <CardHeader>
+                {['dashboard', 'production'].includes(activeSection) ? <>
+                <Card className="overflow-hidden border-slate-200/80 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.45)]">
+                    <CardHeader className="border-b border-slate-200/80 bg-white/90">
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <div>
-                                <p className="text-lg font-semibold text-ink">Production History</p>
-                                <p className="text-sm text-muted">Latest saved batches across the system.</p>
+                                <p className="text-lg font-semibold text-slate-950">Production History</p>
+                                <p className="text-sm text-slate-500">Latest saved batches across the system.</p>
                             </div>
-                            <Badge>{productionBatches.length.toLocaleString()} total</Badge>
+                            <Badge>{filteredProductionRows.length.toLocaleString()} filtered</Badge>
                         </div>
                     </CardHeader>
-                    <CardBody className="space-y-4">
-                        <div className="overflow-x-auto rounded-2xl border border-line bg-white">
-                            <table className="min-w-[780px] w-full border-collapse">
-                                <thead className="bg-slate-50 text-left text-xs uppercase tracking-[0.14em] text-muted">
+                    <CardBody className="space-y-4 p-4 sm:p-6">
+                        <div className="grid gap-3 md:hidden">
+                            {recentBatches.length > 0 ? recentBatches.map((batch) => (
+                                <div key={batch._id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Product</p>
+                                            <p className="mt-1 text-sm font-semibold text-slate-950">{formatProductLabel(batch.productName)}</p>
+                                            <p className="mt-1 text-xs text-slate-500">{batch.batchNo || "-"}</p>
+                                        </div>
+                                        <p className="text-sm font-semibold text-slate-950">{Number(batch.actualKg ?? 0).toLocaleString()} KG</p>
+                                    </div>
+                                    <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                                        <div className="rounded-xl bg-slate-50 p-3">
+                                            <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Created By</p>
+                                            <p className="mt-1 text-sm font-medium text-slate-900">{batch.createdBy || "-"}</p>
+                                        </div>
+                                        <div className="rounded-xl bg-slate-50 p-3">
+                                            <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Created At</p>
+                                            <p className="mt-1 text-sm font-medium text-slate-900">{formatDateTime(batch.createdAt)}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )) : (
+                                <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
+                                    No production batches saved yet.
+                                </div>
+                            )}
+                        </div>
+                        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white hidden md:block">
+                            <table className="min-w-[700px] sm:min-w-[780px] w-full border-collapse">
+                                <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-[0.12em] text-slate-500 sm:text-xs sm:tracking-[0.14em]">
                                     <tr>
                                         <th className="px-4 py-3 font-semibold">Product</th>
                                         <th className="px-4 py-3 font-semibold">Batch No</th>
@@ -687,16 +1523,16 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                                 </thead>
                                 <tbody>
                                     {recentBatches.length > 0 ? recentBatches.map((batch) => (
-                                        <tr key={batch._id} className="border-t border-line">
-                                            <td className="px-4 py-3 text-sm font-semibold text-ink">{formatProductLabel(batch.productName)}</td>
-                                            <td className="px-4 py-3 text-sm text-ink">{batch.batchNo || "-"}</td>
-                                            <td className="px-4 py-3 text-sm text-ink">{Number(batch.actualKg ?? 0).toLocaleString()} KG</td>
-                                            <td className="px-4 py-3 text-sm text-muted">{batch.createdBy || "-"}</td>
-                                            <td className="px-4 py-3 text-sm text-muted">{formatDateTime(batch.createdAt)}</td>
+                                        <tr key={batch._id} className="border-t border-slate-200">
+                                            <td className="px-4 py-3 text-sm font-semibold text-slate-950">{formatProductLabel(batch.productName)}</td>
+                                            <td className="px-4 py-3 text-sm text-slate-700">{batch.batchNo || "-"}</td>
+                                            <td className="px-4 py-3 text-sm text-slate-700">{Number(batch.actualKg ?? 0).toLocaleString()} KG</td>
+                                            <td className="px-4 py-3 text-sm text-slate-500">{batch.createdBy || "-"}</td>
+                                            <td className="px-4 py-3 text-sm text-slate-500">{formatDateTime(batch.createdAt)}</td>
                                         </tr>
                                     )) : (
                                         <tr>
-                                            <td className="px-4 py-5 text-sm text-muted" colSpan={5}>
+                                            <td className="px-4 py-5 text-sm text-slate-500" colSpan={5}>
                                                 No production batches saved yet.
                                             </td>
                                         </tr>
@@ -705,14 +1541,14 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                             </table>
                         </div>
 
-                        <div className="rounded-3xl border border-line bg-[linear-gradient(180deg,rgba(15,118,110,0.08),rgba(255,255,255,0.92))] p-5">
+                        <div className="rounded-3xl border border-slate-200 bg-[linear-gradient(180deg,rgba(15,118,110,0.08),rgba(255,255,255,0.92))] p-5">
                             <div className="flex items-start gap-3">
-                                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accentSoft text-accent">
+                                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-teal-50 text-teal-700">
                                     <Clock3 className="h-5 w-5" />
                                 </div>
                                 <div>
-                                    <p className="text-sm font-semibold text-ink">Active table snapshot</p>
-                                    <p className="mt-1 text-sm text-muted">
+                                    <p className="text-sm font-semibold text-slate-950">Active table snapshot</p>
+                                    <p className="mt-1 text-sm text-slate-500">
                                         {selectedTableName} currently has {itemRows.length.toLocaleString()} item row(s), {currentQuantityTotal.toLocaleString()} total quantity, and {currentAmountTotal.toLocaleString()} total amount.
                                     </p>
                                 </div>
@@ -720,7 +1556,11 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                         </div>
                     </CardBody>
                 </Card>
+                </> : null}
             </div>
+
+            </> : null}
+
         </div>
     );
 }

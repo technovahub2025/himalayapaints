@@ -5,10 +5,8 @@ import { Button, Card, CardBody, CardHeader, Input, Label, Subtitle, Title } fro
 import { toast } from "sonner";
 import { apiFetch } from "@/services/api-client";
 import { useAuthSessionContext } from "@/components/providers";
+import { roleRedirectPath } from "@/lib/routes";
 import { SiteFooter } from "@/components/site-footer";
-function roleRedirectPath(role) {
-    return role === "admin" ? "/admin" : "/user";
-}
 export function LoginPage() {
     const navigate = useNavigate();
     const authSession = useAuthSessionContext();
@@ -36,15 +34,15 @@ export function LoginPage() {
         }
     }
     return (<div className="flex min-h-screen flex-col bg-[radial-gradient(circle_at_top_left,_rgba(15,118,110,0.16),_transparent_26%),linear-gradient(180deg,#f8f4ec_0%,#f3efe6_100%)]">
-      <main className="flex flex-1 items-center px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mx-auto flex w-full max-w-4xl flex-col items-center justify-center gap-8">
-          <Card className="w-full max-w-md overflow-hidden">
-            <CardHeader>
-              <Title>Sign in</Title>
-              <Subtitle>Use your assigned account details to access the dashboard.</Subtitle>
+      <main className="flex flex-1 items-start px-3 py-6 sm:items-center sm:px-4 sm:py-8 lg:px-8">
+        <div className="mx-auto flex w-full max-w-4xl flex-col items-center justify-center gap-6 sm:gap-8">
+          <Card className="w-full max-w-full overflow-hidden sm:max-w-md">
+            <CardHeader className="space-y-1">
+              <Title className="text-xl sm:text-2xl">Sign in</Title>
+              <Subtitle className="text-sm sm:text-base">Use your assigned account details to access production history.</Subtitle>
             </CardHeader>
-            <CardBody>
-              <form onSubmit={handleSubmit} className="space-y-5">
+            <CardBody className="p-5 sm:p-6">
+              <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
                 <div>
                   <Label>Email</Label>
                   <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Enter your email"/>
