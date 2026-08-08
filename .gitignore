@@ -10,3 +10,4 @@ coverage
 *.log
 *.tsbuildinfo
 .env.example
+backend/src/nexion-98f7c-4e49040efb6b.json
