@@ -619,13 +619,6 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
     }, [initialItems, initialTableName, tableNames]);
 
     useEffect(() => {
-        setTableForm((current) => ({
-            ...current,
-            duplicateFrom: selectedTableName
-        }));
-    }, [selectedTableName]);
-
-    useEffect(() => {
         setMaterialRateDrafts(
             Object.fromEntries(
                 rawMaterials.map((material) => [
