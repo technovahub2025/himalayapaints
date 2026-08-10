@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Activity, BarChart3, Clock3, Layers3, Package2, Plus, RefreshCw, Save, Search, Sparkles, Trash2, TrendingUp, WalletCards } from "lucide-react";
+import { Activity, BarChart3, Clock3, Layers3, LoaderCircle, Package2, Plus, RefreshCw, Save, Search, Sparkles, Trash2, TrendingUp, WalletCards } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/services/api-client";
 import { Badge, Button, Card, CardBody, CardHeader, Input, Label, Select, Subtitle, Title } from "@/components/ui";
@@ -710,33 +710,31 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
     }
 
     async function saveItems() {
-        if (!selectedTableName.trim()) {
-            toast.error("Select a table before saving items.");
-            return;
-        }
-        if (itemRows.length === 0) {
-            toast.error("Add at least one item before saving.");
-            return;
-        }
-        const payloadItems = itemRows.map((row, index) => {
-            const material = materialMap.get(normalizeCode(row.code));
-            if (!material) {
-                throw new Error(`Choose a valid raw material code for row ${index + 1}`);
-            }
-            const quantity = Number(row.quantity);
-            if (Number.isNaN(quantity) || quantity < 0) {
-                throw new Error(`Enter a valid quantity for row ${index + 1}`);
-            }
-            return {
-                id: row.id || undefined,
-                code: material.code,
-                name: material.name,
-                quantity,
-                rate: Number(material.rate)
-            };
-        });
-        setSavingItems(true);
         try {
+            if (!selectedTableName.trim()) {
+                throw new Error("Select a table before saving items.");
+            }
+            if (itemRows.length === 0) {
+                throw new Error("Add at least one item before saving.");
+            }
+            const payloadItems = itemRows.map((row, index) => {
+                const material = materialMap.get(normalizeCode(row.code));
+                if (!material) {
+                    throw new Error(`Choose a valid raw material code for row ${index + 1}`);
+                }
+                const quantity = Number(row.quantity);
+                if (Number.isNaN(quantity) || quantity < 0) {
+                    throw new Error(`Enter a valid quantity for row ${index + 1}`);
+                }
+                return {
+                    id: row.id || undefined,
+                    code: material.code,
+                    name: material.name,
+                    quantity,
+                    rate: Number(material.rate)
+                };
+            });
+            setSavingItems(true);
             const data = await apiFetch("/api/admin/items", {
                 method: "PUT",
                 json: {
@@ -1221,10 +1219,16 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                 <CardBody className="space-y-4 p-4 sm:p-6">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <p className="text-sm text-slate-500">{itemRows.length.toLocaleString()} editable row(s)</p>
-                        <Button variant="secondary" onClick={addItemRow}>
-                            <Plus className="mr-2 h-4 w-4" />
-                            Add Row
-                        </Button>
+                        <div className="flex flex-wrap gap-2">
+                            <Button variant="secondary" onClick={addItemRow} disabled={savingItems}>
+                                <Plus className="mr-2 h-4 w-4" />
+                                Add Row
+                            </Button>
+                            <Button variant="primary" onClick={saveItems} disabled={loading || savingItems}>
+                                {savingItems ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                                {savingItems ? "Saving..." : "Save Changes"}
+                            </Button>
+                        </div>
                     </div>
                     <div className="grid gap-3 md:hidden">
                         {itemRows.length > 0 ? itemRows.map((row, index) => {
