@@ -866,13 +866,20 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
         }
         setSavingMaterial(true);
         try {
-            await apiFetch("/api/admin/raw-materials", {
+            const responseData = await apiFetch("/api/admin/raw-materials", {
                 method: "POST",
                 json: { name, code, rate }
             });
+            if (responseData?.material) {
+                setRawMaterials((current) => {
+                    const nextMaterial = responseData.material;
+                    const nextCode = normalizeCode(nextMaterial.code);
+                    const withoutDuplicate = current.filter((material) => normalizeCode(material.code) !== nextCode);
+                    return [...withoutDuplicate, nextMaterial];
+                });
+            }
             toast.success("Raw material created");
             setMaterialForm(EMPTY_MATERIAL_FORM);
-            await loadDashboardData(selectedTableName);
         }
         catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to create raw material");
