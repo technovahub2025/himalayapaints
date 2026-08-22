@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Activity, BarChart3, Clock3, Layers3, LoaderCircle, Package2, Plus, RefreshCw, Save, Search, Sparkles, Trash2, TrendingUp, Upload, WalletCards } from "lucide-react";
+import { Activity, BarChart3, Clock3, Layers3, LoaderCircle, Package2, Pencil, Plus, RefreshCw, Save, Search, Sparkles, Trash2, TrendingUp, Upload, WalletCards, X } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/services/api-client";
 import { Badge, Button, Card, CardBody, CardHeader, Input, Label, Select, Subtitle, Title } from "@/components/ui";
@@ -9,7 +9,7 @@ import { formatProductLabel } from "@/lib/product-label";
 import { useAuthSessionContext } from "@/components/providers";
 
 const EMPTY_TABLE_FORM = { name: "", duplicateFrom: "" };
-const EMPTY_MATERIAL_FORM = { code: "", name: "", rate: "" };
+const EMPTY_MATERIAL_FORM = { code: "", name: "", rate: "", quantity: "" };
 const NUMBER_FORMAT = new Intl.NumberFormat("en-US", {
     maximumFractionDigits: 2
 });
@@ -485,6 +485,8 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
     const [tableForm, setTableForm] = useState(EMPTY_TABLE_FORM);
     const [materialForm, setMaterialForm] = useState(EMPTY_MATERIAL_FORM);
     const [materialRateDrafts, setMaterialRateDrafts] = useState({});
+    const [editingMaterialCode, setEditingMaterialCode] = useState(null);
+    const [editDraft, setEditDraft] = useState({ name: "", rate: "", quantity: "" });
     const [analyticsDatePreset, setAnalyticsDatePreset] = useState("all");
     const [analyticsDateFrom, setAnalyticsDateFrom] = useState("");
     const [analyticsDateTo, setAnalyticsDateTo] = useState("");
@@ -502,7 +504,7 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
             return rawMaterials;
         }
         return rawMaterials.filter((material) => {
-            return [material.code, material.name, String(material.rate ?? "")].join(" ").toLowerCase().includes(needle);
+            return [material.code, material.name, String(material.rate ?? ""), String(material.quantity ?? 0)].join(" ").toLowerCase().includes(needle);
         });
     }, [materialSearch, rawMaterials]);
 
@@ -849,6 +851,7 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
         const name = materialForm.name.trim();
         const code = materialForm.code.trim();
         const rate = Number(materialForm.rate);
+        const quantity = Number(materialForm.quantity);
         if (!name) {
             toast.error("Enter a raw material name.");
             return;
@@ -857,11 +860,15 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
             toast.error("Enter a valid raw material rate.");
             return;
         }
+        if (Number.isNaN(quantity) || quantity < 0) {
+            toast.error("Enter a valid raw material quantity.");
+            return;
+        }
         setSavingMaterial(true);
         try {
             const responseData = await apiFetch("/api/admin/raw-materials", {
                 method: "POST",
-                json: { name, code, rate }
+                json: { name, code, rate, quantity }
             });
             if (responseData?.material) {
                 setRawMaterials((current) => {
@@ -903,6 +910,58 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
         finally {
             setSavingMaterial(false);
         }
+    }
+
+    function startEditingMaterial(material) {
+        setEditingMaterialCode(material.code);
+        setEditDraft({
+            name: material.name ?? "",
+            rate: String(material.rate ?? ""),
+            quantity: String(material.quantity ?? 0)
+        });
+    }
+
+    async function saveMaterialEdit(material) {
+        const name = (editDraft.name ?? "").trim();
+        const rate = Number(editDraft.rate);
+        const quantity = Number(editDraft.quantity);
+        if (!name) {
+            toast.error("Enter a raw material name.");
+            return;
+        }
+        if (!editDraft.rate || Number.isNaN(rate) || rate < 0) {
+            toast.error("Enter a valid rate.");
+            return;
+        }
+        if (Number.isNaN(quantity) || quantity < 0) {
+            toast.error("Enter a valid quantity.");
+            return;
+        }
+        setSavingMaterial(true);
+        try {
+            const responseData = await apiFetch("/api/admin/raw-materials", {
+                method: "PATCH",
+                json: { code: material.code, name, rate, quantity }
+            });
+            if (responseData?.material) {
+                const updated = responseData.material;
+                setRawMaterials((current) => current.map((m) => normalizeCode(m.code) === normalizeCode(updated.code) ? { ...updated, quantity: updated.quantity ?? 0 } : m));
+            }
+            toast.success("Raw material updated");
+            setEditingMaterialCode(null);
+            setEditDraft({ name: "", rate: "", quantity: "" });
+        }
+        catch (error) {
+            toast.error(error instanceof Error ? error.message : "Failed to update raw material");
+        }
+        finally {
+            setSavingMaterial(false);
+        }
+    }
+
+    function cancelEditingMaterial() {
+        setEditingMaterialCode(null);
+        setEditDraft({ name: "", rate: "", quantity: "" });
     }
 
     async function deleteSelectedMaterials() {
@@ -1401,7 +1460,7 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                         </div>
                     </CardHeader>
                     <CardBody className="space-y-4 p-4 sm:p-6">
-                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                             <div>
                                 <Label>Code</Label>
                                 <Input value={materialForm.code} onChange={(event) => setMaterialForm((current) => ({ ...current, code: event.target.value }))} placeholder="Code" />
@@ -1413,6 +1472,10 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                             <div>
                                 <Label>Rate</Label>
                                 <Input value={materialForm.rate} onChange={(event) => setMaterialForm((current) => ({ ...current, rate: event.target.value }))} placeholder="0" inputMode="decimal" />
+                            </div>
+                            <div>
+                                <Label>Quantity</Label>
+                                <Input value={materialForm.quantity} onChange={(event) => setMaterialForm((current) => ({ ...current, quantity: event.target.value }))} placeholder="0" inputMode="decimal" />
                             </div>
                         </div>
                         <div className="flex flex-wrap gap-2 sm:gap-3">
@@ -1441,39 +1504,74 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                             <Input value={materialSearch} onChange={(event) => setMaterialSearch(event.target.value)} placeholder="Search raw materials" className="pl-11" />
                         </div>
                         <div className="grid gap-3 md:hidden">
-                            {filteredMaterials.length > 0 ? filteredMaterials.map((material) => (
-                                <div key={material.code} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                                    <div className="flex items-start justify-between gap-3">
-                                        <div>
-                                            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Code</p>
-                                            <p className="mt-1 text-sm font-semibold text-slate-950">{material.code}</p>
-                                            <p className="mt-1 text-sm text-slate-700">{material.name}</p>
+                            {filteredMaterials.length > 0 ? filteredMaterials.map((material) => {
+                                const isEditing = editingMaterialCode === material.code;
+                                return (
+                                    <div key={material.code} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Code</p>
+                                                <p className="mt-1 text-sm font-semibold text-slate-950">{material.code}</p>
+                                                {isEditing ? (
+                                                    <>
+                                                        <Input
+                                                            value={editDraft.name ?? ""}
+                                                            onChange={(event) => setEditDraft((current) => ({ ...current, name: event.target.value }))}
+                                                            placeholder="Material name"
+                                                            className="mt-1"
+                                                        />
+                                                        <div className="mt-2">
+                                                            <Label>Rate</Label>
+                                                            <Input
+                                                                value={editDraft.rate ?? ""}
+                                                                onChange={(event) => setEditDraft((current) => ({ ...current, rate: event.target.value }))}
+                                                                inputMode="decimal"
+                                                                className="mt-1"
+                                                            />
+                                                        </div>
+                                                        <div className="mt-2">
+                                                            <Label>Quantity</Label>
+                                                            <Input
+                                                                value={editDraft.quantity ?? ""}
+                                                                onChange={(event) => setEditDraft((current) => ({ ...current, quantity: event.target.value }))}
+                                                                inputMode="decimal"
+                                                                className="mt-1"
+                                                            />
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <p className="mt-1 text-sm text-slate-700">{material.name}</p>
+                                                        <p className="mt-1 text-sm text-slate-500">Rate: {formatAmount(material.rate)} | Qty: {Number(material.quantity ?? 0)}</p>
+                                                    </>
+                                                )}
+                                            </div>
+                                            <div className="flex flex-col gap-2">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedMaterialCodes.includes(material.code)}
+                                                    onChange={() => toggleMaterialSelection(material.code)}
+                                                    className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-600"
+                                                />
+                                                {isEditing ? (
+                                                    <>
+                                                        <Button variant="ghost" onClick={() => saveMaterialEdit(material)} disabled={savingMaterial} size="sm">
+                                                            <Save className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button variant="ghost" onClick={cancelEditingMaterial} disabled={savingMaterial} size="sm">
+                                                            <X className="h-4 w-4" />
+                                                        </Button>
+                                                    </>
+                                                ) : (
+                                                    <Button variant="ghost" onClick={() => startEditingMaterial(material)} disabled={savingMaterial} size="sm">
+                                                        <Pencil className="h-4 w-4" />
+                                                    </Button>
+                                                )}
+                                            </div>
                                         </div>
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedMaterialCodes.includes(material.code)}
-                                            onChange={() => toggleMaterialSelection(material.code)}
-                                            className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-600"
-                                        />
                                     </div>
-                                    <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
-                                        <div>
-                                            <Label>Rate</Label>
-                                            <Input
-                                                value={materialRateDrafts[material.code] ?? ""}
-                                                onChange={(event) => setMaterialRateDrafts((current) => ({ ...current, [material.code]: event.target.value }))}
-                                                inputMode="decimal"
-                                            />
-                                        </div>
-                                        <div className="flex items-end">
-                                            <Button variant="ghost" onClick={() => saveRawMaterialRate(material.code)} disabled={savingMaterial} className="w-full">
-                                                <Save className="mr-2 h-4 w-4" />
-                                                Save
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </div>
-                            )) : (
+                                );
+                            }) : (
                                 <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
                                     No raw materials match your search.
                                 </div>
@@ -1487,39 +1585,79 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                                         <th className="px-4 py-3 font-semibold">Code</th>
                                         <th className="px-4 py-3 font-semibold">Name</th>
                                         <th className="px-4 py-3 font-semibold">Rate</th>
+                                        <th className="px-4 py-3 font-semibold">Quantity</th>
                                         <th className="px-4 py-3 font-semibold text-right">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {filteredMaterials.length > 0 ? filteredMaterials.map((material) => (
-                                        <tr key={material.code} className="border-t border-slate-200">
-                                            <td className="px-4 py-3">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selectedMaterialCodes.includes(material.code)}
-                                                    onChange={() => toggleMaterialSelection(material.code)}
-                                                    className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-600"
-                                                />
-                                            </td>
-                                            <td className="px-4 py-3 text-sm font-semibold text-slate-950">{material.code}</td>
-                                            <td className="px-4 py-3 text-sm text-slate-700">{material.name}</td>
-                                            <td className="px-4 py-3">
-                                                <Input
-                                                    value={materialRateDrafts[material.code] ?? ""}
-                                                    onChange={(event) => setMaterialRateDrafts((current) => ({ ...current, [material.code]: event.target.value }))}
-                                                    inputMode="decimal"
-                                                />
-                                            </td>
-                                            <td className="px-4 py-3 text-right">
-                                                <Button variant="ghost" onClick={() => saveRawMaterialRate(material.code)} disabled={savingMaterial}>
-                                                    <Save className="mr-2 h-4 w-4" />
-                                                    Save
-                                                </Button>
-                                            </td>
-                                        </tr>
-                                    )) : (
+                                    {filteredMaterials.length > 0 ? filteredMaterials.map((material) => {
+                                        const isEditing = editingMaterialCode === material.code;
+                                        return (
+                                            <tr key={material.code} className="border-t border-slate-200">
+                                                <td className="px-4 py-3">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedMaterialCodes.includes(material.code)}
+                                                        onChange={() => toggleMaterialSelection(material.code)}
+                                                        className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-600"
+                                                    />
+                                                </td>
+                                                <td className="px-4 py-3 text-sm font-semibold text-slate-950">{material.code}</td>
+                                                <td className="px-4 py-3">
+                                                    {isEditing ? (
+                                                        <Input
+                                                            value={editDraft.name ?? ""}
+                                                            onChange={(event) => setEditDraft((current) => ({ ...current, name: event.target.value }))}
+                                                        />
+                                                    ) : (
+                                                        <span className="text-sm text-slate-700">{material.name}</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {isEditing ? (
+                                                        <Input
+                                                            value={editDraft.rate ?? ""}
+                                                            onChange={(event) => setEditDraft((current) => ({ ...current, rate: event.target.value }))}
+                                                            inputMode="decimal"
+                                                        />
+                                                    ) : (
+                                                        <span className="text-sm text-slate-500">{formatAmount(material.rate)}</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {isEditing ? (
+                                                        <Input
+                                                            value={editDraft.quantity ?? ""}
+                                                            onChange={(event) => setEditDraft((current) => ({ ...current, quantity: event.target.value }))}
+                                                            inputMode="decimal"
+                                                        />
+                                                    ) : (
+                                                        <span className="text-sm text-slate-500">{formatAmount(material.quantity ?? 0)}</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3 text-right">
+                                                    {isEditing ? (
+                                                        <>
+                                                            <Button variant="ghost" onClick={() => saveMaterialEdit(material)} disabled={savingMaterial}>
+                                                                <Save className="mr-2 h-4 w-4" />
+                                                                Save
+                                                            </Button>
+                                                            <Button variant="ghost" onClick={cancelEditingMaterial} disabled={savingMaterial}>
+                                                                <X className="h-4 w-4" />
+                                                            </Button>
+                                                        </>
+                                                    ) : (
+                                                        <Button variant="ghost" onClick={() => startEditingMaterial(material)} disabled={savingMaterial}>
+                                                            <Pencil className="mr-2 h-4 w-4" />
+                                                            Edit
+                                                        </Button>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        );
+                                    }) : (
                                         <tr>
-                                            <td className="px-4 py-5 text-sm text-slate-500" colSpan={5}>
+                                            <td className="px-4 py-5 text-sm text-slate-500" colSpan={6}>
                                                 No raw materials match your search.
                                             </td>
                                         </tr>

@@ -70,6 +70,7 @@ export async function createRawMaterial(req, res) {
         const rawCode = typeof req.body.code === "string" ? req.body.code.trim() : "";
         const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
         const rate = typeof req.body.rate === "number" ? req.body.rate : Number(req.body.rate);
+        const quantity = req.body.quantity === undefined ? 0 : typeof req.body.quantity === "number" ? req.body.quantity : Number(req.body.quantity);
         const code = rawCode || generateRawMaterialCode(name);
         if (!name) {
             return res.status(400).json({ message: "Raw material name is required" });
@@ -80,13 +81,16 @@ export async function createRawMaterial(req, res) {
         if (Number.isNaN(rate) || rate < 0) {
             return res.status(400).json({ message: "Rate must be a valid number" });
         }
+        if (Number.isNaN(quantity) || quantity < 0) {
+            return res.status(400).json({ message: "Quantity must be a valid number" });
+        }
         await dbConnect();
         const normalizedCode = normalizeCode(code);
         const duplicate = await RawMaterial.findOne({ code: new RegExp(`^${escapeRegExp(code)}$`, "i") }).lean();
         if (duplicate) {
             return res.status(409).json({ message: "Raw material code already exists" });
         }
-        const created = await RawMaterial.create({ code, name, rate });
+        const created = await RawMaterial.create({ code, name, rate, quantity });
         return res.status(201).json({ material: created });
     }
     catch {
@@ -99,12 +103,33 @@ export async function updateRawMaterial(req, res) {
         return forbidden(res);
     try {
         const code = typeof req.body.code === "string" ? req.body.code.trim() : "";
-        const rate = typeof req.body.rate === "number" ? req.body.rate : Number(req.body.rate);
         if (!code) {
             return res.status(400).json({ message: "Raw material code is required" });
         }
-        if (Number.isNaN(rate) || rate < 0) {
-            return res.status(400).json({ message: "Rate must be a valid number" });
+        const updates = {};
+        if (req.body.name !== undefined) {
+            const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
+            if (!name) {
+                return res.status(400).json({ message: "Raw material name is required" });
+            }
+            updates.name = name;
+        }
+        if (req.body.rate !== undefined) {
+            const rate = typeof req.body.rate === "number" ? req.body.rate : Number(req.body.rate);
+            if (Number.isNaN(rate) || rate < 0) {
+                return res.status(400).json({ message: "Rate must be a valid number" });
+            }
+            updates.rate = rate;
+        }
+        if (req.body.quantity !== undefined) {
+            const quantity = typeof req.body.quantity === "number" ? req.body.quantity : Number(req.body.quantity);
+            if (Number.isNaN(quantity) || quantity < 0) {
+                return res.status(400).json({ message: "Quantity must be a valid number" });
+            }
+            updates.quantity = quantity;
+        }
+        if (Object.keys(updates).length === 0) {
+            return res.status(400).json({ message: "No valid fields to update" });
         }
         await dbConnect();
         const normalizedCode = normalizeCode(code);
@@ -112,19 +137,21 @@ export async function updateRawMaterial(req, res) {
         if (!material) {
             return res.status(404).json({ message: "Raw material not found" });
         }
-        await RawMaterial.updateOne({ _id: material._id }, { $set: { rate } });
-        const itemMatches = await Item.find().lean();
-        for (const item of itemMatches) {
-            const itemCode = item.code?.trim() || generateRawMaterialCode(item.name);
-            if (normalizeCode(itemCode) !== normalizedCode)
-                continue;
-            await Item.findByIdAndUpdate(item._id, {
-                code: itemCode,
-                rate,
-                amount: Number((item.quantity * rate).toFixed(2))
-            });
+        await RawMaterial.updateOne({ _id: material._id }, { $set: updates });
+        if (updates.rate !== undefined) {
+            const itemMatches = await Item.find().lean();
+            for (const item of itemMatches) {
+                const itemCode = item.code?.trim() || generateRawMaterialCode(item.name);
+                if (normalizeCode(itemCode) !== normalizedCode)
+                    continue;
+                await Item.findByIdAndUpdate(item._id, {
+                    code: itemCode,
+                    rate: updates.rate,
+                    amount: Number((item.quantity * updates.rate).toFixed(2))
+                });
+            }
         }
-        return res.json({ material: { ...material, rate } });
+        return res.json({ material: { ...material, ...updates } });
     }
     catch {
         return res.status(500).json({ message: "Failed to update raw material" });
@@ -209,6 +236,7 @@ export async function importRawMaterials(req, res) {
         const codeKey = findHeaderKey(firstRow, ["code", "rawmaterialcode"]);
         const nameKey = findHeaderKey(firstRow, ["name", "materialname", "rawmaterialname", "rawmaterial", "material"]);
         const rateKey = findHeaderKey(firstRow, ["rate", "price", "cost"]);
+        const quantityKey = findHeaderKey(firstRow, ["quantity", "qty", "stock", "count"]);
         if (!nameKey || !rateKey) {
             return res.status(400).json({
                 success: false,
@@ -233,6 +261,8 @@ export async function importRawMaterials(req, res) {
             const rateRaw = rateKey ? row[rateKey] : "";
             const rate = Number(rateRaw);
             const code = rawCode || (name ? generateRawMaterialCode(name) : "");
+            const quantityRaw = quantityKey ? getCellText(row[quantityKey]) : "";
+            const quantity = quantityRaw === "" ? 0 : Number(quantityRaw);
             if (!rawCode && !name && getCellText(rateRaw) === "") {
                 skippedRows.push({ row: rowNumber });
                 continue;
@@ -245,6 +275,9 @@ export async function importRawMaterials(req, res) {
             }
             if (getCellText(rateRaw) === "" || Number.isNaN(rate) || rate < 0) {
                 errors.push("Rate must be a valid number");
+            }
+            if (quantityRaw !== "" && (Number.isNaN(quantity) || quantity < 0)) {
+                errors.push("Quantity must be a valid number");
             }
             const normalizedCode = code ? normalizeCode(code) : "";
             if (normalizedCode && seenCodes.has(normalizedCode)) {
@@ -266,7 +299,8 @@ export async function importRawMaterials(req, res) {
                     row: rowNumber,
                     code,
                     name,
-                    rate
+                    rate,
+                    quantity: quantityKey ? quantity : 0
                 });
             }
         }
@@ -291,20 +325,22 @@ export async function importRawMaterials(req, res) {
                 if (existing) {
                     await RawMaterial.updateOne(
                         { _id: existing._id },
-                        { $set: { code: validRow.code, name: validRow.name, rate: validRow.rate } }
+                        { $set: { code: validRow.code, name: validRow.name, rate: validRow.rate, quantity: validRow.quantity } }
                     );
-                    updated.push({ code: validRow.code, name: validRow.name, rate: validRow.rate });
-                    existingMap.set(normalizedCode, { ...existing, name: validRow.name, rate: validRow.rate });
+                    updated.push({ code: validRow.code, name: validRow.name, rate: validRow.rate, quantity: validRow.quantity });
+                    existingMap.set(normalizedCode, { ...existing, name: validRow.name, rate: validRow.rate, quantity: validRow.quantity });
                 } else {
                     const created = await RawMaterial.create({
                         code: validRow.code,
                         name: validRow.name,
-                        rate: validRow.rate
+                        rate: validRow.rate,
+                        quantity: validRow.quantity
                     });
                     imported.push({
                         code: validRow.code,
                         name: validRow.name,
-                        rate: validRow.rate
+                        rate: validRow.rate,
+                        quantity: validRow.quantity
                     });
                     existingMap.set(normalizedCode, created.toObject ? created.toObject() : created);
                 }

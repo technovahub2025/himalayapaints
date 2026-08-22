@@ -2,18 +2,18 @@ import { writeFileSync } from "fs";
 import XLSX from "xlsx";
 
 const worksheetData = [
-    ["Code", "Material Name", "Rate"],
-    ["TEST001", "Test Material Alpha", 150],
-    ["TEST002", "Test Material Beta", 80],
-    ["TEST003", "Test Material Gamma", 220],
-    ["TEST004", "Test Material Delta", 45],
-    ["TEST005", "Test Material Epsilon", 99.99],
-    ["TEST001", "Test Material Alpha Updated", 175],
-    ["TEST006", "", 50],
-    ["TEST007", "Test Material Zeta", "not-a-number"],
-    ["TEST008", "Test Material Eta", 75],
-    ["", "", ""],
-    ["TEST009", "Test Material Theta", 120]
+    ["Code", "Material Name", "Rate", "Quantity"],
+    ["TEST001", "Test Material Alpha", 150, 25],
+    ["TEST002", "Test Material Beta", 80, 50],
+    ["TEST003", "Test Material Gamma", 220, 0],
+    ["TEST004", "Test Material Delta", 45, 100],
+    ["TEST005", "Test Material Epsilon", 99.99, 75],
+    ["TEST001", "Test Material Alpha Updated", 175, 30],
+    ["TEST006", "", 50, 10],
+    ["TEST007", "Test Material Zeta", "not-a-number", 20],
+    ["TEST008", "Test Material Eta", 75, 60],
+    ["", "", "", ""],
+    ["TEST009", "Test Material Theta", 120, 40]
 ];
 
 const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
