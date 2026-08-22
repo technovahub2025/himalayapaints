@@ -20,6 +20,35 @@ function readQueryString(value) {
 function resolveActualQty(stdQty, actualQty) {
     return typeof actualQty === "number" && !Number.isNaN(actualQty) ? actualQty : stdQty;
 }
+function parseBatchNumber(value) {
+    const match = /^BATCH-(\d+)$/.exec(String(value ?? "").trim());
+    return match ? Number(match[1]) : null;
+}
+function formatBatchNumber(num) {
+    return `BATCH-${String(num).padStart(4, "0")}`;
+}
+export async function getNextBatchNo(req, res) {
+    const auth = await getAuthFromRequest(req);
+    if (!auth || (auth.role !== "admin" && auth.role !== "user"))
+        return forbidden(res);
+    try {
+        await dbConnect();
+        const existing = await ProductionBatch.find({
+            batchNo: { $regex: /^BATCH-\d+$/ }
+        }).select("batchNo").lean();
+        let maxNum = 0;
+        for (const doc of existing) {
+            const num = parseBatchNumber(doc.batchNo);
+            if (num !== null && num > maxNum) {
+                maxNum = num;
+            }
+        }
+        return res.json({ batchNo: formatBatchNumber(maxNum + 1) });
+    }
+    catch {
+        return res.status(500).json({ message: "Failed to generate batch number" });
+    }
+}
 export async function getProductionBatches(req, res) {
     const auth = await getAuthFromRequest(req);
     if (!auth)
@@ -42,11 +71,18 @@ export async function createProductionBatch(req, res) {
             return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid production batch" });
         }
         await dbConnect();
+        const batchNo = parsed.data.batchNo || "";
+        if (batchNo) {
+            const existing = await ProductionBatch.findOne({ batchNo }).lean();
+            if (existing) {
+                return res.status(409).json({ message: `Batch number ${batchNo} already exists.` });
+            }
+        }
         let createdBatch = null;
         await session.withTransaction(async () => {
             const [batch] = await ProductionBatch.create([{
                 productName: parsed.data.productName,
-                batchNo: parsed.data.batchNo || "",
+                batchNo: batchNo,
                 batchSize: parsed.data.batchSize || "",
                 specificGravity: parsed.data.specificGravity || "",
                 viscosity: parsed.data.viscosity || "",
@@ -96,7 +132,7 @@ export async function createProductionBatch(req, res) {
                         balanceAfter,
                         referenceType: "production",
                         referenceId: String(batch._id),
-                        batchNo: parsed.data.batchNo || "",
+                        batchNo: batchNo,
                         notes: line.remarks || "",
                         createdBy: auth.email
                     }], { session });

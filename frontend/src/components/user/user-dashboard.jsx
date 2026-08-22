@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FileSpreadsheet, FileText, LoaderCircle, Printer, RefreshCw, Save, ChevronDown, Download } from "lucide-react";
+import { FileSpreadsheet, FileText, LoaderCircle, Pencil, Printer, RefreshCw, Save, ChevronDown, Download } from "lucide-react";
 import { calculateGrandTotal, safePercent, scaleQuantity } from "@/lib/calculations";
 import { Button, Card, CardBody, CardHeader, Input, Subtitle, Title } from "@/components/ui";
 import { SummaryCards } from "@/components/summary-cards";
@@ -36,8 +36,10 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
      const [packRows, setPackRows] = useState(EMPTY_PACK_ROWS);
     const [batchDetails, setBatchDetails] = useState(EMPTY_BATCH_DETAILS);
     const [loading, setLoading] = useState(false);
-    const [savingProduction, setSavingProduction] = useState(false);
-    const restoringDraftRef = useRef(null);
+     const [savingProduction, setSavingProduction] = useState(false);
+     const restoringDraftRef = useRef(null);
+     const batchNoLoadedRef = useRef(false);
+     const [batchNoEditable, setBatchNoEditable] = useState(false);
     useEffect(() => {
         setItems(initialItems);
         setTableName(initialTableName);
@@ -110,6 +112,8 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
         }
         else {
             resetDraftState();
+            batchNoLoadedRef.current = false;
+            void fetchNextBatchNo();
         }
         const timer = window.setTimeout(() => {
             restoringDraftRef.current = null;
@@ -128,6 +132,20 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
             ...current,
             [key]: value
         }));
+    }
+    async function fetchNextBatchNo() {
+        if (batchNoLoadedRef.current)
+            return;
+        batchNoLoadedRef.current = true;
+        try {
+            const response = await fetch("/api/production/next-batch-no");
+            const data = await response.json();
+            if (response.ok && data.batchNo) {
+                updateBatchDetail("batchNo", data.batchNo);
+            }
+        } catch {
+            // silently skip - user can still type a batch number
+        }
     }
     function handleTargetKgChange(value) {
         setTargetKg(value);
@@ -181,6 +199,9 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
         }
         restoringDraftRef.current = tableName;
         resetDraftState();
+        batchNoLoadedRef.current = false;
+        setBatchNoEditable(false);
+        void fetchNextBatchNo();
         window.setTimeout(() => {
             restoringDraftRef.current = null;
         }, 0);
@@ -718,16 +739,28 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
           <h3 className="text-[18px] font-semibold text-slate-900">Batch Details</h3>
         </div>
         <div className="grid gap-4 sm:gap-6" style={{ gridTemplateColumns: "repeat(12, minmax(0, 1fr))" }}>
-          <div className="col-span-12 sm:col-span-6 xl:col-span-4">
-            <label htmlFor="batch-no" className="block text-[13px] font-medium text-slate-700 mb-2">Batch No</label>
-            <Input
-              id="batch-no"
-              value={batchDetails.batchNo}
-              onChange={(e) => updateBatchDetail("batchNo", e.target.value)}
-              placeholder="Enter batch number"
-              className="h-11.5 rounded-xl border-border bg-white placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
-            />
-          </div>
+           <div className="col-span-12 sm:col-span-6 xl:col-span-4">
+             <label htmlFor="batch-no" className="block text-[13px] font-medium text-slate-700 mb-2">Batch No</label>
+             <div className="flex items-end gap-2">
+               <Input
+               id="batch-no"
+               value={batchDetails.batchNo}
+               onChange={(e) => updateBatchDetail("batchNo", e.target.value)}
+               readOnly={!batchNoEditable}
+               placeholder="Enter batch number"
+               className="h-11.5 rounded-xl border-border bg-white placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
+             />
+             {batchNoEditable ? (
+               <Button variant="secondary" type="button" onClick={() => setBatchNoEditable(false)} className="h-11.5 mb-0.5">
+                 <Save className="h-4 w-4" />
+               </Button>
+             ) : (
+               <Button variant="secondary" type="button" onClick={() => setBatchNoEditable(true)} className="h-11.5 mb-0.5" disabled={!batchDetails.batchNo}>
+                 <Pencil className="h-4 w-4" />
+               </Button>
+             )}
+            </div>
+           </div>
 
           <div className="col-span-12 sm:col-span-6 xl:col-span-4">
             <label htmlFor="batch-date" className="block text-[13px] font-medium text-slate-700 mb-2">Date</label>
