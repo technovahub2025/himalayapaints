@@ -1,7 +1,7 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Activity, BarChart3, Clock3, Layers3, LoaderCircle, Package2, Plus, RefreshCw, Save, Search, Sparkles, Trash2, TrendingUp, WalletCards } from "lucide-react";
+import { Activity, BarChart3, Clock3, Layers3, LoaderCircle, Package2, Plus, RefreshCw, Save, Search, Sparkles, Trash2, TrendingUp, Upload, WalletCards } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/services/api-client";
 import { Badge, Button, Card, CardBody, CardHeader, Input, Label, Select, Subtitle, Title } from "@/components/ui";
@@ -480,6 +480,7 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
     const [savingItems, setSavingItems] = useState(false);
     const [savingTable, setSavingTable] = useState(false);
     const [savingMaterial, setSavingMaterial] = useState(false);
+    const [rawMaterialImportLoading, setRawMaterialImportLoading] = useState(false);
     const [selectedMaterialCodes, setSelectedMaterialCodes] = useState([]);
     const [tableForm, setTableForm] = useState(EMPTY_TABLE_FORM);
     const [materialForm, setMaterialForm] = useState(EMPTY_MATERIAL_FORM);
@@ -489,6 +490,7 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
     const [analyticsDateTo, setAnalyticsDateTo] = useState("");
     const [analyticsProductFilter, setAnalyticsProductFilter] = useState("");
     const [analyticsMaterialFilter, setAnalyticsMaterialFilter] = useState("");
+    const rawMaterialImportInputRef = useRef(null);
 
     const materialMap = useMemo(() => {
         return new Map(rawMaterials.map((material) => [normalizeCode(material.code), material]));
@@ -938,6 +940,50 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
             return [...current, code];
         });
     }
+    function openRawMaterialImport() {
+        rawMaterialImportInputRef.current?.click();
+    }
+    async function handleRawMaterialImportFileChange(event) {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (!file) {
+            return;
+        }
+        const ext = file.name.split(".").pop()?.toLowerCase();
+        if (!["xlsx", "xls", "csv"].includes(ext)) {
+            toast.error("Please select a valid Excel file (.xlsx, .xls, or .csv).");
+            return;
+        }
+        setRawMaterialImportLoading(true);
+        try {
+            const formData = new FormData();
+            formData.append("file", file);
+            const data = await apiFetch("/api/admin/raw-materials/import", {
+                method: "POST",
+                body: formData
+            });
+            const imported = Number(data.imported ?? 0);
+            const updated = Number(data.updated ?? 0);
+            const failed = Number(data.failed ?? 0);
+            const nextMaterials = Array.isArray(data.materials) ? data.materials : [];
+            setRawMaterials((current) => {
+                const importedCodes = new Set(nextMaterials.map((material) => normalizeCode(material.code)));
+                const withoutDuplicates = current.filter((material) => !importedCodes.has(normalizeCode(material.code)));
+                return [...withoutDuplicates, ...nextMaterials];
+            });
+            if (failed > 0) {
+                toast.error(`Import completed with errors. ${imported} imported, ${updated} updated, ${failed} failed.`);
+            } else {
+                toast.success(`Import completed. ${imported} imported, ${updated} updated.`);
+            }
+        }
+        catch (error) {
+            toast.error(error instanceof Error ? error.message : "Failed to import raw materials");
+        }
+        finally {
+            setRawMaterialImportLoading(false);
+        }
+    }
 
     const kpiCards = [
         {
@@ -1374,11 +1420,22 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                                 <Plus className="mr-2 h-4 w-4" />
                                 Add Raw Material
                             </Button>
+                            <Button variant="secondary" onClick={openRawMaterialImport} disabled={savingMaterial || rawMaterialImportLoading}>
+                                <Upload className="mr-2 h-4 w-4" />
+                                {rawMaterialImportLoading ? "Importing..." : "Import Excel"}
+                            </Button>
                             <Button variant="danger" onClick={deleteSelectedMaterials} disabled={savingMaterial}>
                                 <Trash2 className="mr-2 h-4 w-4" />
                                 Delete Selected
                             </Button>
                         </div>
+                        <input
+                            type="file"
+                            accept=".xlsx,.xls,.csv"
+                            className="hidden"
+                            ref={rawMaterialImportInputRef}
+                            onChange={handleRawMaterialImportFileChange}
+                        />
                         <div className="relative">
                             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                             <Input value={materialSearch} onChange={(event) => setMaterialSearch(event.target.value)} placeholder="Search raw materials" className="pl-11" />

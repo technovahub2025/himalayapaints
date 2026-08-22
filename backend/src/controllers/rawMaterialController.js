@@ -1,3 +1,4 @@
+import XLSX from "xlsx";
 import Item from "../models/Item.js";
 import RawMaterial from "../models/RawMaterial.js";
 import { dbConnect } from "../lib/db.js";
@@ -129,64 +130,210 @@ export async function updateRawMaterial(req, res) {
         return res.status(500).json({ message: "Failed to update raw material" });
     }
 }
+function normalizeHeader(value) {
+    return String(value ?? "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "");
+}
+function getCellText(value) {
+    if (value === null || value === undefined) {
+        return "";
+    }
+    return String(value).trim();
+}
+function findHeaderKey(row, candidates) {
+    if (!row || typeof row !== "object") {
+        return null;
+    }
+    for (const key of Object.keys(row)) {
+        if (candidates.includes(normalizeHeader(key))) {
+            return key;
+        }
+    }
+    return null;
+}
+function getRowExtension(value) {
+    if (!value)
+        return "";
+    return String(value).toLowerCase().split(".").pop();
+}
 export async function importRawMaterials(req, res) {
     const auth = await getAuthFromRequest(req);
     if (!auth || auth.role !== "admin")
         return forbidden(res);
     try {
-        const rows = Array.isArray(req.body.materials) ? req.body.materials : [];
-        if (rows.length === 0) {
-            return res.status(400).json({ message: "No raw materials provided for import" });
+        if (!req.file) {
+            return res.status(400).json({ success: false, message: "No file uploaded" });
+        }
+        const ext = getRowExtension(req.file.originalname);
+        if (!["xlsx", "xls", "csv"].includes(ext)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid file type. Only .xlsx, .xls, and .csv files are allowed."
+            });
+        }
+        const buffer = req.file.buffer;
+        if (!buffer || buffer.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "The uploaded file is empty."
+            });
         }
         await dbConnect();
-        const existingMaterials = await RawMaterial.find().select("code").lean();
-        const takenCodes = new Set(existingMaterials.map((material) => normalizeCode(material.code)));
-        const createdMaterials = [];
+        let workbook;
+        try {
+            workbook = XLSX.read(buffer, { type: "buffer" });
+        } catch {
+            return res.status(400).json({
+                success: false,
+                message: "The uploaded file is corrupted or not a valid Excel/CSV file."
+            });
+        }
+        if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "The uploaded file does not contain any sheets."
+            });
+        }
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "", raw: false });
+        if (!rows || rows.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "No data rows found in the file."
+            });
+        }
+        const firstRow = rows[0];
+        const codeKey = findHeaderKey(firstRow, ["code", "rawmaterialcode"]);
+        const nameKey = findHeaderKey(firstRow, ["name", "materialname", "rawmaterialname", "rawmaterial", "material"]);
+        const rateKey = findHeaderKey(firstRow, ["rate", "price", "cost"]);
+        if (!nameKey || !rateKey) {
+            return res.status(400).json({
+                success: false,
+                message: "The file must include 'Material Name' and 'Rate' columns."
+            });
+        }
+        const existingMaterials = await RawMaterial.find().select("code _id").lean();
+        const existingMap = new Map();
+        for (const material of existingMaterials) {
+            existingMap.set(normalizeCode(material.code), material);
+        }
+        const validRows = [];
+        const errorRows = [];
         const skippedRows = [];
+        const seenCodes = new Set();
         for (let index = 0; index < rows.length; index += 1) {
             const row = rows[index] || {};
-            const name = typeof row.name === "string" ? row.name.trim() : "";
-            const rawCode = typeof row.code === "string" ? row.code.trim() : "";
-            const code = rawCode || generateRawMaterialCode(name);
-            const rate = typeof row.rate === "number" ? row.rate : Number(row.rate);
-            const rowNumber = index + 1;
+            const rowNumber = index + 2;
             const errors = [];
+            const rawCode = codeKey ? getCellText(row[codeKey]) : "";
+            const name = getCellText(row[nameKey]);
+            const rateRaw = rateKey ? row[rateKey] : "";
+            const rate = Number(rateRaw);
+            const code = rawCode || (name ? generateRawMaterialCode(name) : "");
+            if (!rawCode && !name && getCellText(rateRaw) === "") {
+                skippedRows.push({ row: rowNumber });
+                continue;
+            }
             if (!name) {
-                errors.push("Raw material name is required");
+                errors.push("Material Name is missing");
             }
             if (!code) {
-                errors.push("Raw material code is required");
+                errors.push("Code is missing");
             }
-            if (Number.isNaN(rate) || rate < 0) {
+            if (getCellText(rateRaw) === "" || Number.isNaN(rate) || rate < 0) {
                 errors.push("Rate must be a valid number");
             }
-            const normalizedCode = normalizeCode(code);
-            if (!errors.length && takenCodes.has(normalizedCode)) {
-                errors.push("Raw material code already exists");
+            const normalizedCode = code ? normalizeCode(code) : "";
+            if (normalizedCode && seenCodes.has(normalizedCode)) {
+                errors.push("Duplicate code within the file");
+            }
+            if (normalizedCode) {
+                seenCodes.add(normalizedCode);
             }
             if (errors.length > 0) {
-                skippedRows.push({
+                errorRows.push({
                     row: rowNumber,
                     code,
                     name,
-                    rate: row.rate,
+                    rate: rateRaw,
                     errors
                 });
-                continue;
+            } else {
+                validRows.push({
+                    row: rowNumber,
+                    code,
+                    name,
+                    rate
+                });
             }
-            const created = await RawMaterial.create({ code, name, rate });
-            createdMaterials.push(created);
-            takenCodes.add(normalizedCode);
         }
-        return res.status(201).json({
-            createdCount: createdMaterials.length,
-            skippedCount: skippedRows.length,
-            materials: createdMaterials,
-            skippedRows
+        if (validRows.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "No valid rows to import",
+                imported: 0,
+                updated: 0,
+                skipped: skippedRows.length,
+                failed: errorRows.length,
+                errors: errorRows
+            });
+        }
+        const imported = [];
+        const updated = [];
+        const writeErrors = [];
+        for (const validRow of validRows) {
+            const normalizedCode = normalizeCode(validRow.code);
+            const existing = existingMap.get(normalizedCode);
+            try {
+                if (existing) {
+                    await RawMaterial.updateOne(
+                        { _id: existing._id },
+                        { $set: { code: validRow.code, name: validRow.name, rate: validRow.rate } }
+                    );
+                    updated.push({ code: validRow.code, name: validRow.name, rate: validRow.rate });
+                    existingMap.set(normalizedCode, { ...existing, name: validRow.name, rate: validRow.rate });
+                } else {
+                    const created = await RawMaterial.create({
+                        code: validRow.code,
+                        name: validRow.name,
+                        rate: validRow.rate
+                    });
+                    imported.push({
+                        code: validRow.code,
+                        name: validRow.name,
+                        rate: validRow.rate
+                    });
+                    existingMap.set(normalizedCode, created.toObject ? created.toObject() : created);
+                }
+            } catch (dbError) {
+                writeErrors.push({
+                    row: validRow.row,
+                    code: validRow.code,
+                    name: validRow.name,
+                    rate: validRow.rate,
+                    errors: [dbError.message || "Database error"]
+                });
+            }
+        }
+        const allErrors = [...errorRows, ...writeErrors];
+        const message = allErrors.length > 0
+            ? "Excel import completed with errors"
+            : "Excel import completed";
+        return res.json({
+            success: true,
+            message,
+            imported: imported.length,
+            updated: updated.length,
+            skipped: skippedRows.length,
+            failed: allErrors.length,
+            errors: allErrors,
+            materials: [...imported, ...updated]
         });
-    }
-    catch {
-        return res.status(500).json({ message: "Failed to import raw materials" });
+    } catch {
+        return res.status(500).json({ success: false, message: "Excel import failed" });
     }
 }
 export async function deleteRawMaterials(req, res) {
