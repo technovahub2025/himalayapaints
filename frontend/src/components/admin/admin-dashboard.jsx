@@ -73,17 +73,6 @@ function getPresetDateRange(preset) {
     return { start, end };
 }
 
-function getSalesValue(record) {
-    const candidates = [record?.totalSales, record?.salesAmount, record?.saleAmount, record?.sales, record?.revenue];
-    for (const candidate of candidates) {
-        const value = typeof candidate === "object" && candidate !== null ? candidate.amount : candidate;
-        if (value !== undefined && value !== null && value !== "" && Number.isFinite(Number(value))) {
-            return Number(value);
-        }
-    }
-    return null;
-}
-
 function sum(values) {
     return values.reduce((total, value) => total + Number(value ?? 0), 0);
 }
@@ -381,6 +370,8 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
     const [itemRows, setItemRows] = useState(() => initialItems.map(createItemDraft));
     const [rawMaterials, setRawMaterials] = useState([]);
     const [productionBatches, setProductionBatches] = useState([]);
+    const [sales, setSales] = useState([]);
+    const [salesError, setSalesError] = useState(null);
     const [materialSearch, setMaterialSearch] = useState("");
     const [loading, setLoading] = useState(true);
     const [savingItems, setSavingItems] = useState(false);
@@ -484,7 +475,6 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                 filteredLines,
                 batchKg: Number(batch.actualKg ?? 0),
                 batchAmount: Number(filteredLines.reduce((total, line) => total + Number(line.amount ?? 0), 0).toFixed(2)),
-                batchSales: getSalesValue(batch),
                 matchesDate,
                 matchesProduct,
                 matchesMaterial
@@ -495,12 +485,6 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
     const productionByProductSeries = useMemo(() => buildSeries(filteredProductionRows, (batch) => formatProductLabel(batch.productName), (batch) => batch.batchKg, 6), [filteredProductionRows]);
     const productionShareSeries = useMemo(() => buildSeries(filteredProductionRows, (batch) => formatProductLabel(batch.productName), (batch) => batch.batchKg, 6), [filteredProductionRows]);
     const productionCostByProductSeries = useMemo(() => buildSeries(filteredProductionRows, (batch) => formatProductLabel(batch.productName), (batch) => batch.batchAmount, 6), [filteredProductionRows]);
-    const topSellingProductsSeries = useMemo(() => {
-        if (!filteredProductionRows.some((batch) => batch.batchSales !== null)) {
-            return [];
-        }
-        return buildSeries(filteredProductionRows.filter((batch) => batch.batchSales !== null), (batch) => formatProductLabel(batch.productName), (batch) => batch.batchSales, 6);
-    }, [filteredProductionRows]);
     const rawMaterialUsageSeries = useMemo(() => buildSeries(filteredProductionRows.flatMap((batch) => batch.filteredLines.map((line) => ({
         lineMaterial: line.lineMaterial,
         materialName: line.materialName,
@@ -510,16 +494,38 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
         const hasFilters = analyticsDatePreset !== "all" || analyticsProductFilter || analyticsMaterialFilter;
         const filteredProductNames = new Set(filteredProductionRows.map((batch) => normalizeCode(batch.productName)).filter(Boolean));
         const filteredMaterialNames = new Set(filteredProductionRows.flatMap((batch) => batch.filteredLines.map((line) => normalizeCode(line.lineMaterial?.code || line.lineMaterial?.name || line.materialName))).filter(Boolean));
-        const salesRows = filteredProductionRows.filter((batch) => batch.batchSales !== null);
         return {
             products: hasFilters ? filteredProductNames.size : Array.from(new Set(tableOptions.filter(Boolean))).length,
             materials: hasFilters ? filteredMaterialNames.size : rawMaterials.length,
             production: filteredProductionRows.length,
             kg: filteredProductionRows.length > 0 ? sum(filteredProductionRows.map((batch) => batch.batchKg)) : null,
-            amount: filteredProductionRows.length > 0 ? sum(filteredProductionRows.map((batch) => batch.batchAmount)) : null,
-            sales: salesRows.length > 0 ? sum(salesRows.map((batch) => batch.batchSales)) : null
+            amount: filteredProductionRows.length > 0 ? sum(filteredProductionRows.map((batch) => batch.batchAmount)) : null
         };
     }, [analyticsDatePreset, analyticsMaterialFilter, analyticsProductFilter, filteredProductionRows, rawMaterials.length, tableOptions]);
+
+    const salesDateRange = useMemo(() => {
+        const presetRange = getPresetDateRange(analyticsDatePreset);
+        return {
+            start: analyticsDatePreset === "custom" ? normalizeDateValue(analyticsDateFrom) : presetRange.start,
+            end: analyticsDatePreset === "custom" ? normalizeDateValue(analyticsDateTo) : presetRange.end
+        };
+    }, [analyticsDatePreset, analyticsDateFrom, analyticsDateTo]);
+
+    const filteredSales = useMemo(() => {
+        const productKey = normalizeCode(analyticsProductFilter);
+        return sales.filter((sale) => {
+            const matchesDate = withinDateRange(sale.createdAt, salesDateRange.start, salesDateRange.end);
+            const matchesProduct = !productKey || normalizeCode(sale.productName) === productKey;
+            return matchesDate && matchesProduct;
+        });
+    }, [sales, salesDateRange, analyticsProductFilter]);
+
+    const salesTotalAmount = useMemo(() => sum(filteredSales.map((sale) => sale.amount ?? 0)), [filteredSales]);
+    const salesTotalQuantity = useMemo(() => sum(filteredSales.map((sale) => sale.quantity ?? 0)), [filteredSales]);
+    const salesCount = filteredSales.length;
+    const salesAverageAmount = useMemo(() => salesCount > 0 ? salesTotalAmount / salesCount : 0, [salesTotalAmount, salesCount]);
+    const salesByProductSeries = useMemo(() => buildSeries(filteredSales, (sale) => formatProductLabel(sale.productName), (sale) => sale.amount, 6), [filteredSales]);
+    const recentSales = useMemo(() => filteredSales.slice(0, 5), [filteredSales]);
 
     useEffect(() => {
         setSelectedTableName(initialTableName);
@@ -555,6 +561,14 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
             setTableOptions(Array.from(new Set([nextTableName, ...nextTables])).sort());
             setRawMaterials(Array.isArray(materialsData.materials) ? materialsData.materials : []);
             setProductionBatches(Array.isArray(productionData.batches) ? productionData.batches : []);
+            try {
+                const salesData = await apiFetch("/api/sales");
+                setSales(Array.isArray(salesData.sales) ? salesData.sales : []);
+                setSalesError(null);
+            } catch (error) {
+                setSalesError(error instanceof Error ? error.message : "Failed to load sales data");
+                setSales([]);
+            }
         }
         catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to load admin dashboard");
@@ -578,6 +592,14 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
         }
         catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to load analytics data");
+        }
+        try {
+            const salesData = await apiFetch("/api/sales");
+            setSales(Array.isArray(salesData.sales) ? salesData.sales : []);
+            setSalesError(null);
+        } catch (error) {
+            setSalesError(error instanceof Error ? error.message : "Failed to load sales data");
+            setSales([]);
         }
         finally {
             setLoading(false);
@@ -987,10 +1009,31 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
         },
         {
             label: "Total Sales",
-            value: analyticsTotals.sales === null ? "—" : formatAmount(analyticsTotals.sales),
-            hint: analyticsTotals.sales === null ? "Sales data is not available in the current API" : "Sales from live production records",
+            value: formatAmount(salesTotalAmount),
+            hint: salesCount > 0 ? `From ${salesCount} sale record(s)` : "No sales records in current filters",
             icon: WalletCards,
             accent: "from-violet-50 to-white"
+        },
+        {
+            label: "Total Quantity",
+            value: `${formatAmount(salesTotalQuantity)} KG`,
+            hint: "Filtered total sale quantity",
+            icon: Package2,
+            accent: "from-cyan-50 to-white"
+        },
+        {
+            label: "Sales Count",
+            value: formatAmount(salesCount),
+            hint: "Number of matched sale records",
+            icon: Activity,
+            accent: "from-sky-50 to-white"
+        },
+        {
+            label: "Average Sale",
+            value: formatAmount(salesAverageAmount),
+            hint: salesCount > 0 ? "Average per sale transaction" : "No sales records available",
+            icon: Sparkles,
+            accent: "from-amber-50 to-white"
         }
     ];
 
@@ -1143,8 +1186,8 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                     <HorizontalBarChart data={productionCostByProductSeries} emptyLabel="No production cost data is available for the current filters." valueLabel="amount" />
                 </ChartFrame>
 
-                <ChartFrame title="Top Selling Products" subtitle="Shown only when sales data is supplied by the API." badge={topSellingProductsSeries.length > 0 ? "Top 6" : "Unavailable"} icon={WalletCards} className="xl:col-span-6">
-                    <HorizontalBarChart data={topSellingProductsSeries} emptyLabel="Sales data is not available in the current API response." valueLabel="amount" />
+                <ChartFrame title="Sales by Product" subtitle="Top products ranked by total sales amount." badge={salesByProductSeries.length > 0 ? "Top 6" : "No data"} icon={WalletCards} className="xl:col-span-6">
+                    <HorizontalBarChart data={salesByProductSeries} emptyLabel={salesError ? salesError : "No sales records saved yet."} valueLabel="amount" />
                 </ChartFrame>
             </div>
             </> : null}
@@ -1658,6 +1701,97 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                 </Card>
                 </> : null}
             </div>
+
+            {['dashboard', 'production'].includes(activeSection) ? <>
+                <Card className="overflow-hidden border-slate-200/80 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.45)]">
+                    <CardHeader className="border-b border-slate-200/80 bg-white/90">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <p className="text-lg font-semibold text-slate-950">Sales History</p>
+                                <p className="text-sm text-slate-500">Recent sales records fetched from the Sales API.</p>
+                            </div>
+                            <Badge>{filteredSales.length.toLocaleString()} filtered</Badge>
+                        </div>
+                    </CardHeader>
+                    <CardBody className="space-y-4 p-4 sm:p-6">
+                        {salesError ? (
+                            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-500">
+                                {salesError}
+                            </div>
+                        ) : (
+                            <>
+                                <div className="grid gap-3 md:hidden">
+                                    {recentSales.length > 0 ? recentSales.map((sale) => (
+                                        <div key={sale._id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div>
+                                                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Product</p>
+                                                    <p className="mt-1 text-sm font-semibold text-slate-950">{formatProductLabel(sale.productName)}</p>
+                                                </div>
+                                                <p className="text-sm font-semibold text-slate-950">{formatAmount(sale.amount)}</p>
+                                            </div>
+                                            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                                                <div className="rounded-xl bg-slate-50 p-3">
+                                                    <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Quantity</p>
+                                                    <p className="mt-1 text-sm font-medium text-slate-900">{Number(sale.quantity ?? 0).toLocaleString()} KG</p>
+                                                </div>
+                                                <div className="rounded-xl bg-slate-50 p-3">
+                                                    <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Rate</p>
+                                                    <p className="mt-1 text-sm font-medium text-slate-900">{formatAmount(sale.rate)}</p>
+                                                </div>
+                                                <div className="rounded-xl bg-slate-50 p-3">
+                                                    <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Sold By</p>
+                                                    <p className="mt-1 text-sm font-medium text-slate-900">{sale.createdBy || "-"}</p>
+                                                </div>
+                                                <div className="rounded-xl bg-slate-50 p-3">
+                                                    <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Date</p>
+                                                    <p className="mt-1 text-sm font-medium text-slate-900">{formatDateTime(sale.createdAt)}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )) : (
+                                        <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
+                                            No sales data available yet.
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white hidden md:block">
+                                    <table className="min-w-[700px] sm:min-w-[780px] w-full border-collapse">
+                                        <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-[0.12em] text-slate-500 sm:text-xs sm:tracking-[0.14em]">
+                                            <tr>
+                                                <th className="px-4 py-3 font-semibold">Product</th>
+                                                <th className="px-4 py-3 font-semibold">Quantity KG</th>
+                                                <th className="px-4 py-3 font-semibold">Rate</th>
+                                                <th className="px-4 py-3 font-semibold">Amount</th>
+                                                <th className="px-4 py-3 font-semibold">Sold By</th>
+                                                <th className="px-4 py-3 font-semibold">Date</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {recentSales.length > 0 ? recentSales.map((sale) => (
+                                                <tr key={sale._id} className="border-t border-slate-200">
+                                                    <td className="px-4 py-3 text-sm font-semibold text-slate-950">{formatProductLabel(sale.productName)}</td>
+                                                    <td className="px-4 py-3 text-sm text-slate-700">{Number(sale.quantity ?? 0).toLocaleString()} KG</td>
+                                                    <td className="px-4 py-3 text-sm text-slate-500">{formatAmount(sale.rate)}</td>
+                                                    <td className="px-4 py-3 text-sm font-semibold text-slate-950">{formatAmount(sale.amount)}</td>
+                                                    <td className="px-4 py-3 text-sm text-slate-500">{sale.createdBy || "-"}</td>
+                                                    <td className="px-4 py-3 text-sm text-slate-500">{formatDateTime(sale.createdAt)}</td>
+                                                </tr>
+                                            )) : (
+                                                <tr>
+                                                    <td className="px-4 py-5 text-sm text-slate-500" colSpan={6}>
+                                                        No sales data available yet.
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </>
+                        )}
+                    </CardBody>
+                </Card>
+            </> : null}
 
             </> : null}
 
