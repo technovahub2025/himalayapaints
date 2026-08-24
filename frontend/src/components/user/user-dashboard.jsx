@@ -6,6 +6,7 @@ import { calculateGrandTotal, safePercent, scaleQuantity } from "@/lib/calculati
 import { Button, Badge, Card, CardBody, CardHeader, Input, Subtitle, Title } from "@/components/ui";
 import { SummaryCards } from "@/components/summary-cards";
 import { ProductSelector } from "@/components/user/product-selector";
+import { RawMaterialSelector } from "@/components/user/raw-material-selector";
 import { RawMaterialTable } from "@/components/user/raw-material-table";
 import { PackSizeTable } from "@/components/user/pack-size-table";
 import { formatProductLabel } from "@/lib/product-label";
@@ -39,6 +40,7 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
     const [loading, setLoading] = useState(false);
     const [savingProduction, setSavingProduction] = useState(false);
     const [detailsType, setDetailsType] = useState("product");
+    const [selectedRawMaterial, setSelectedRawMaterial] = useState("");
     const [rawMaterials, setRawMaterials] = useState([]);
     const [rawMaterialsLoading, setRawMaterialsLoading] = useState(false);
     const [rawMaterialsError, setRawMaterialsError] = useState(null);
@@ -724,8 +726,17 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
           {email ? <p className="mt-2 text-sm text-muted">Signed in as {email}</p> : null}
         </div>
         <div className="w-full max-w-none rounded-3xl border border-line bg-white/80 p-3 shadow-sm backdrop-blur print:hidden sm:p-4 lg:max-w-4xl">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <ProductSelector value={tableName} options={availableTables} onSelect={loadTable} disabled={loading}/>
+           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+              {detailsType === "product" ? (
+                <ProductSelector value={tableName} options={availableTables} onSelect={loadTable} disabled={loading}/>
+              ) : (
+                <RawMaterialSelector
+                  value={selectedRawMaterial}
+                  options={rawMaterials}
+                  loading={rawMaterialsLoading}
+                  onSelect={setSelectedRawMaterial}
+                />
+              )}
             <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3 lg:flex lg:flex-wrap lg:justify-end">
               <Button variant="secondary" onClick={saveProductionBatch} disabled={savingProduction || loading} className="w-full sm:w-auto">
                 {savingProduction ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4"/>}
