@@ -73,6 +73,24 @@ function getPresetDateRange(preset) {
     return { start, end };
 }
 
+function getDateKey(value, period = "daily") {
+    const date = normalizeDateValue(value);
+    if (!date) return "";
+    if (period === "monthly") return date.toISOString().slice(0, 7);
+    if (period === "weekly") {
+        const day = date.getDay();
+        const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+        const monday = new Date(date.setDate(diff));
+        return monday.toISOString().slice(0, 10);
+    }
+    return date.toISOString().slice(0, 10);
+}
+
+function formatShortDate(value) {
+    const date = normalizeDateValue(value);
+    return date ? date.toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) : "-";
+}
+
 function sum(values) {
     return values.reduce((total, value) => total + Number(value ?? 0), 0);
 }
@@ -158,6 +176,55 @@ function HorizontalBarChart({ data, emptyLabel, valueLabel }) {
                     </div>
                 );
             })}
+        </div>
+    );
+}
+
+function createPolylinePoints(values, max = 1, width = 100, height = 100) {
+    if (!values || values.length === 0) return "";
+    const gap = values.length === 1 ? 0 : width / (values.length - 1);
+    return values
+        .map((value, index) => {
+            const y = height - (Number(value ?? 0) / max) * height;
+            return `${(index * gap).toFixed(1)},${y.toFixed(1)}`;
+        })
+        .join(" ");
+}
+
+function TrendChart({ data, emptyLabel, valueLabel = "", lineColor = "#0d9488" }) {
+    if (!data || data.length === 0) {
+        return <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-500">{emptyLabel}</div>;
+    }
+    const values = data.map((item) => Number(item.value ?? 0));
+    const max = Math.max(...values, 1);
+    const width = 100;
+    const height = 100;
+    const points = createPolylinePoints(values, max, width, height);
+    const areaPath = `M 0 ${height} L ${points} L ${width} ${height} Z`;
+    return (
+        <div className="w-full space-y-3">
+            <div className="flex items-end justify-between gap-2 text-xs text-slate-400">
+                <p>{formatAmount(values[0])}{valueLabel}</p>
+                <p>{formatAmount(values[values.length - 1])}{valueLabel}</p>
+            </div>
+            <div className="relative w-full" style={{ height: `${height + 30}px` }}>
+                <svg className="h-full w-full" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+                    <defs>
+                        <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={lineColor} stopOpacity={0.3} />
+                            <stop offset="100%" stopColor={lineColor} stopOpacity={0.05} />
+                        </linearGradient>
+                    </defs>
+                    <path d={areaPath} fill="url(#trendGradient)" stroke="none" />
+                    <polyline points={points} fill="none" stroke={lineColor} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+                </svg>
+            </div>
+            <div className="flex justify-between gap-1 overflow-x-auto text-[10px] text-slate-400">
+                {data.slice(0, 6).map((item) => (
+                    <span key={item.label} className="shrink-0">{item.label}</span>
+                ))}
+                {data.length > 6 ? <span className="shrink-0">+{data.length - 6} more</span> : null}
+            </div>
         </div>
     );
 }
@@ -389,6 +456,12 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
     const [analyticsDateTo, setAnalyticsDateTo] = useState("");
     const [analyticsProductFilter, setAnalyticsProductFilter] = useState("");
     const [analyticsMaterialFilter, setAnalyticsMaterialFilter] = useState("");
+    const [salesDatePreset, setSalesDatePreset] = useState("all");
+    const [salesTrendPeriod, setSalesTrendPeriod] = useState("daily");
+    const [salesMetric, setSalesMetric] = useState("amount");
+    const [salesProductFilter, setSalesProductFilter] = useState("");
+    const [salesDateFrom, setSalesDateFrom] = useState("");
+    const [salesDateTo, setSalesDateTo] = useState("");
     const rawMaterialImportInputRef = useRef(null);
 
     const materialMap = useMemo(() => {
@@ -504,27 +577,41 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
     }, [analyticsDatePreset, analyticsMaterialFilter, analyticsProductFilter, filteredProductionRows, rawMaterials.length, tableOptions]);
 
     const salesDateRange = useMemo(() => {
-        const presetRange = getPresetDateRange(analyticsDatePreset);
+        const presetRange = getPresetDateRange(salesDatePreset);
         return {
-            start: analyticsDatePreset === "custom" ? normalizeDateValue(analyticsDateFrom) : presetRange.start,
-            end: analyticsDatePreset === "custom" ? normalizeDateValue(analyticsDateTo) : presetRange.end
+            start: salesDatePreset === "custom" ? normalizeDateValue(salesDateFrom) : presetRange.start,
+            end: salesDatePreset === "custom" ? normalizeDateValue(salesDateTo) : presetRange.end
         };
-    }, [analyticsDatePreset, analyticsDateFrom, analyticsDateTo]);
+    }, [salesDatePreset, salesDateFrom, salesDateTo]);
 
     const filteredSales = useMemo(() => {
-        const productKey = normalizeCode(analyticsProductFilter);
+        const productKey = normalizeCode(salesProductFilter);
         return sales.filter((sale) => {
             const matchesDate = withinDateRange(sale.createdAt, salesDateRange.start, salesDateRange.end);
             const matchesProduct = !productKey || normalizeCode(sale.productName) === productKey;
             return matchesDate && matchesProduct;
         });
-    }, [sales, salesDateRange, analyticsProductFilter]);
+    }, [sales, salesDateRange, salesProductFilter]);
 
+    const salesProducts = useMemo(() => Array.from(new Set(sales.map((sale) => String(sale.productName ?? "").trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right)), [sales]);
     const salesTotalAmount = useMemo(() => sum(filteredSales.map((sale) => sale.amount ?? 0)), [filteredSales]);
     const salesTotalQuantity = useMemo(() => sum(filteredSales.map((sale) => sale.quantity ?? 0)), [filteredSales]);
     const salesCount = filteredSales.length;
     const salesAverageAmount = useMemo(() => salesCount > 0 ? salesTotalAmount / salesCount : 0, [salesTotalAmount, salesCount]);
-    const salesByProductSeries = useMemo(() => buildSeries(filteredSales, (sale) => formatProductLabel(sale.productName), (sale) => sale.amount, 6), [filteredSales]);
+    const salesMetricValue = (sale) => salesMetric === "quantity" ? (sale.quantity ?? 0) : (sale.amount ?? 0);
+    const salesByProductSeries = useMemo(() => buildSeries(filteredSales, (sale) => formatProductLabel(sale.productName), salesMetricValue, 6), [filteredSales, salesMetric]);
+    const salesTrendSeries = useMemo(() => {
+        if (filteredSales.length === 0) return [];
+        const grouped = new Map();
+        filteredSales.forEach((sale) => {
+            const key = getDateKey(sale.createdAt, salesTrendPeriod === "weekly" ? "weekly" : salesTrendPeriod === "monthly" ? "monthly" : "daily");
+            const value = Number(salesMetricValue(sale) ?? 0);
+            grouped.set(key, (grouped.get(key) ?? 0) + value);
+        });
+        return Array.from(grouped.entries())
+            .map(([label, value]) => ({ label: formatShortDate(label), value: Number(value.toFixed(2)) }))
+            .sort((left, right) => new Date(left.label) - new Date(right.label));
+    }, [filteredSales, salesTrendPeriod, salesMetric]);
     const recentSales = useMemo(() => filteredSales.slice(0, 5), [filteredSales]);
 
     useEffect(() => {
@@ -603,6 +690,17 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
         }
         finally {
             setLoading(false);
+        }
+    }
+
+    async function refreshSalesData() {
+        try {
+            const salesData = await apiFetch("/api/sales");
+            setSales(Array.isArray(salesData.sales) ? salesData.sales : []);
+            setSalesError(null);
+        } catch (error) {
+            setSalesError(error instanceof Error ? error.message : "Failed to load sales data");
+            setSales([]);
         }
     }
 
@@ -1006,7 +1104,10 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
             hint: "Formula-derived production cost from live material rates",
             icon: Sparkles,
             accent: "from-amber-50 to-white"
-        },
+        }
+    ];
+
+    const salesKpiCards = [
         {
             label: "Total Sales",
             value: formatAmount(salesTotalAmount),
@@ -1182,104 +1283,11 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                     <PieChart data={productionShareSeries} emptyLabel="No product production data is available for the current filters." />
                 </ChartFrame>
 
-                <ChartFrame title="Production Cost by Product" subtitle="Formula-derived cost by product using current raw-material rates." badge="Top 6" icon={Sparkles}>
-                    <HorizontalBarChart data={productionCostByProductSeries} emptyLabel="No production cost data is available for the current filters." valueLabel="amount" />
-                </ChartFrame>
-
-                <ChartFrame title="Sales by Product" subtitle="Top products ranked by total sales amount." badge={salesByProductSeries.length > 0 ? "Top 6" : "No data"} icon={WalletCards}>
-                    <HorizontalBarChart data={salesByProductSeries} emptyLabel={salesError ? salesError : "No sales records saved yet."} valueLabel="amount" />
-                </ChartFrame>
-
-                {['dashboard', 'production'].includes(activeSection) ? <Card className="overflow-hidden border-slate-200/80 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.45)]">
-                    <CardHeader className="border-b border-slate-200/80 bg-white/90">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                                <p className="text-lg font-semibold text-slate-950">Sales History</p>
-                                <p className="text-sm text-slate-500">Recent sales records fetched from the Sales API.</p>
-                            </div>
-                            <Badge>{filteredSales.length.toLocaleString()} filtered</Badge>
-                        </div>
-                    </CardHeader>
-                    <CardBody className="space-y-4 p-4 sm:p-6">
-                        {salesError ? (
-                            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-500">
-                                {salesError}
-                            </div>
-                        ) : (
-                            <>
-                                <div className="grid gap-3 md:hidden">
-                                    {recentSales.length > 0 ? recentSales.map((sale) => (
-                                        <div key={sale._id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                                            <div className="flex items-start justify-between gap-3">
-                                                <div>
-                                                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Product</p>
-                                                    <p className="mt-1 text-sm font-semibold text-slate-950">{formatProductLabel(sale.productName)}</p>
-                                                </div>
-                                                <p className="text-sm font-semibold text-slate-950">{formatAmount(sale.amount)}</p>
-                                            </div>
-                                            <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                                                <div className="rounded-xl bg-slate-50 p-3">
-                                                    <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Quantity</p>
-                                                    <p className="mt-1 text-sm font-medium text-slate-900">{Number(sale.quantity ?? 0).toLocaleString()} KG</p>
-                                                </div>
-                                                <div className="rounded-xl bg-slate-50 p-3">
-                                                    <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Rate</p>
-                                                    <p className="mt-1 text-sm font-medium text-slate-900">{formatAmount(sale.rate)}</p>
-                                                </div>
-                                                <div className="rounded-xl bg-slate-50 p-3">
-                                                    <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Sold By</p>
-                                                    <p className="mt-1 text-sm font-medium text-slate-900">{sale.createdBy || "-"}</p>
-                                                </div>
-                                                <div className="rounded-xl bg-slate-50 p-3">
-                                                    <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Date</p>
-                                                    <p className="mt-1 text-sm font-medium text-slate-900">{formatDateTime(sale.createdAt)}</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )) : (
-                                        <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
-                                            No sales data available yet.
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white hidden md:block">
-                                    <table className="min-w-[700px] sm:min-w-[780px] w-full border-collapse">
-                                        <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-[0.12em] text-slate-500 sm:text-xs sm:tracking-[0.14em]">
-                                            <tr>
-                                                <th className="px-4 py-3 font-semibold">Product</th>
-                                                <th className="px-4 py-3 font-semibold">Quantity KG</th>
-                                                <th className="px-4 py-3 font-semibold">Rate</th>
-                                                <th className="px-4 py-3 font-semibold">Amount</th>
-                                                <th className="px-4 py-3 font-semibold">Sold By</th>
-                                                <th className="px-4 py-3 font-semibold">Date</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {recentSales.length > 0 ? recentSales.map((sale) => (
-                                                <tr key={sale._id} className="border-t border-slate-200">
-                                                    <td className="px-4 py-3 text-sm font-semibold text-slate-950">{formatProductLabel(sale.productName)}</td>
-                                                    <td className="px-4 py-3 text-sm text-slate-700">{Number(sale.quantity ?? 0).toLocaleString()} KG</td>
-                                                    <td className="px-4 py-3 text-sm text-slate-500">{formatAmount(sale.rate)}</td>
-                                                    <td className="px-4 py-3 text-sm font-semibold text-slate-950">{formatAmount(sale.amount)}</td>
-                                                    <td className="px-4 py-3 text-sm text-slate-500">{sale.createdBy || "-"}</td>
-                                                    <td className="px-4 py-3 text-sm text-slate-500">{formatDateTime(sale.createdAt)}</td>
-                                                </tr>
-                                            )) : (
-                                                <tr>
-                                                    <td className="px-4 py-5 text-sm text-slate-500" colSpan={6}>
-                                                        No sales data available yet.
-                                                    </td>
-                                                </tr>
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </>
-                        )}
-                    </CardBody>
-                </Card> : null}
-            </div>
-            </> : null}
+                 <ChartFrame title="Production Cost by Product" subtitle="Formula-derived cost by product using current raw-material rates." badge="Top 6" icon={Sparkles}>
+                     <HorizontalBarChart data={productionCostByProductSeries} emptyLabel="No production cost data is available for the current filters." valueLabel="amount" />
+                 </ChartFrame>
+             </div>
+             </> : null}
 
             {activeSection === "products" ? <>
             <Card className="overflow-hidden border-slate-200/80 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.45)]">
@@ -1790,6 +1798,228 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                 </Card>
                 </> : null}
             </div>
+
+            {activeSection === "dashboard" ? <>
+                <section className="rounded-[2rem] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(15,118,110,0.03),rgba(255,255,255,1))] shadow-[0_18px_60px_-38px_rgba(15,23,42,0.45)]">
+                    <div className="p-4 sm:p-5 lg:p-6">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                            <div className="space-y-1">
+                                <Badge className="w-fit rounded-full border border-teal-100 bg-white/80 px-4 py-1.5 text-[0.65rem] uppercase tracking-[0.18em] text-teal-700">
+                                    <WalletCards className="mr-2 h-3.5 w-3.5" />
+                                    Sales analytics
+                                </Badge>
+                                <Title className="text-2xl sm:text-3xl">Sales Overview</Title>
+                                <Subtitle className="text-sm text-slate-600 sm:text-base">
+                                    Sales data from the existing Sales API. Summary cards, trend and product breakdowns update with the active filters.
+                                </Subtitle>
+                            </div>
+                            <Button variant="secondary" onClick={refreshSalesData} disabled={salesError === null && sales.length > 0 && !loading}>
+                                <RefreshCw className="mr-2 h-4 w-4" />
+                                Refresh
+                            </Button>
+                        </div>
+
+                        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                            <div>
+                                <Label>Date Range</Label>
+                                <Select value={salesDatePreset} onChange={(event) => { setSalesDatePreset(event.target.value); }}>
+                                    <option value="all">All time</option>
+                                    <option value="today">Today</option>
+                                    <option value="week">This Week</option>
+                                    <option value="month">This Month</option>
+                                    <option value="year">This Year</option>
+                                    <option value="custom">Custom Range</option>
+                                </Select>
+                            </div>
+                            {salesDatePreset === "custom" ? (
+                                <>
+                                    <div>
+                                        <Label>Date From</Label>
+                                        <Input type="date" value={salesDateFrom} onChange={(event) => setSalesDateFrom(event.target.value)} />
+                                    </div>
+                                    <div>
+                                        <Label>Date To</Label>
+                                        <Input type="date" value={salesDateTo} onChange={(event) => setSalesDateTo(event.target.value)} />
+                                    </div>
+                                </>
+                            ) : null}
+                            <div>
+                                <Label>Product</Label>
+                                <Select value={salesProductFilter} onChange={(event) => setSalesProductFilter(event.target.value)}>
+                                    <option value="">All products</option>
+                                    {salesProducts.map((product) => (
+                                        <option key={product} value={product}>
+                                            {formatProductLabel(product)}
+                                        </option>
+                                    ))}
+                                </Select>
+                            </div>
+                            <div className="flex items-end gap-1">
+                                <Label>Metric</Label>
+                                <div className="flex gap-1">
+                                    <Button
+                                        variant={salesMetric === "amount" ? "primary" : "secondary"}
+                                        className="px-3 py-1.5 text-xs"
+                                        onClick={() => setSalesMetric("amount")}
+                                    >
+                                        Amount
+                                    </Button>
+                                    <Button
+                                        variant={salesMetric === "quantity" ? "primary" : "secondary"}
+                                        className="px-3 py-1.5 text-xs"
+                                        onClick={() => setSalesMetric("quantity")}
+                                    >
+                                        Quantity
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                            {salesKpiCards.map((card) => (
+                                <MetricCard key={card.label} {...card} />
+                            ))}
+                        </div>
+
+                        <div className="mt-5 grid gap-6 lg:grid-cols-2">
+                            <ChartFrame title="Sales Trend" subtitle="Sales over time. Switch between daily, weekly and monthly aggregation." icon={TrendingUp}>
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-center gap-1">
+                                        <Button
+                                            variant={salesTrendPeriod === "daily" ? "primary" : "secondary"}
+                                            className="px-3 py-1.5 text-xs"
+                                            onClick={() => setSalesTrendPeriod("daily")}
+                                        >
+                                            Daily
+                                        </Button>
+                                        <Button
+                                            variant={salesTrendPeriod === "weekly" ? "primary" : "secondary"}
+                                            className="px-3 py-1.5 text-xs"
+                                            onClick={() => setSalesTrendPeriod("weekly")}
+                                        >
+                                            Weekly
+                                        </Button>
+                                        <Button
+                                            variant={salesTrendPeriod === "monthly" ? "primary" : "secondary"}
+                                            className="px-3 py-1.5 text-xs"
+                                            onClick={() => setSalesTrendPeriod("monthly")}
+                                        >
+                                            Monthly
+                                        </Button>
+                                    </div>
+                                    {salesError ? (
+                                        <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-500">
+                                            {salesError}
+                                        </div>
+                                    ) : (
+                                        <TrendChart
+                                            data={salesTrendSeries}
+                                            emptyLabel="No sales data available yet."
+                                            valueLabel={salesMetric === "quantity" ? " KG" : ""}
+                                        />
+                                    )}
+                                </div>
+                            </ChartFrame>
+
+                            <ChartFrame title="Sales by Product" subtitle="Top products ranked by sales." badge={salesByProductSeries.length > 0 ? "Top 6" : "No data"} icon={WalletCards}>
+                                {salesError ? (
+                                    <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-500">
+                                        {salesError}
+                                    </div>
+                                ) : (
+                                    <HorizontalBarChart
+                                        data={salesByProductSeries}
+                                        emptyLabel="No sales records saved yet."
+                                        valueLabel={salesMetric === "quantity" ? "KG" : "amount"}
+                                    />
+                                )}
+                            </ChartFrame>
+
+                            <ChartFrame title="Top Selling Products" subtitle="Ranked products by sales performance." icon={BarChart3}>
+                                {salesError ? (
+                                    <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-500">
+                                        {salesError}
+                                    </div>
+                                ) : salesByProductSeries.length === 0 ? (
+                                    <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-500">
+                                        No sales records saved yet.
+                                    </div>
+                                ) : (
+                                    <ol className="space-y-2.5">
+                                        {salesByProductSeries.slice(0, 6).map((item, index) => (
+                                            <li key={item.label} className="flex items-center gap-3 text-sm">
+                                                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-teal-100 font-semibold text-teal-700">{index + 1}</span>
+                                                <span className="flex-1 font-medium text-slate-700">{item.label}</span>
+                                                <span className="shrink-0 font-semibold text-slate-950">
+                                                    {salesMetric === "quantity" ? `${formatAmount(item.value)} KG` : formatAmount(item.value)}
+                                                </span>
+                                            </li>
+                                        ))}
+                                    </ol>
+                                )}
+                            </ChartFrame>
+                        </div>
+
+                        <Card className="mt-5 border-slate-200/80 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.45)]">
+                            <CardHeader className="border-b border-slate-200/80 bg-white/90">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                    <div>
+                                        <p className="text-lg font-semibold text-slate-950">Sales History</p>
+                                        <p className="text-sm text-slate-500">All sales records matching the active filters.</p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Badge>{filteredSales.length.toLocaleString()} records</Badge>
+                                        <Button variant="ghost" onClick={() => navigate("/sales")}>
+                                            <BarChart3 className="mr-2 h-4 w-4" />
+                                            View All
+                                        </Button>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardBody className="p-0">
+                                {salesError ? (
+                                    <div className="p-6 text-sm text-slate-500">
+                                        Unable to load sales data.
+                                    </div>
+                                ) : filteredSales.length === 0 ? (
+                                    <div className="p-6 text-sm text-slate-500">
+                                        No sales data available yet.
+                                    </div>
+                                ) : (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full border-collapse">
+                                            <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-[0.12em] text-slate-500 sm:text-xs sm:tracking-[0.14em]">
+                                                <tr>
+                                                    <th className="px-4 py-3 font-semibold">Date</th>
+                                                    <th className="px-4 py-3 font-semibold">Product</th>
+                                                    <th className="px-4 py-3 font-semibold">Quantity KG</th>
+                                                    <th className="px-4 py-3 font-semibold">Rate</th>
+                                                    <th className="px-4 py-3 font-semibold">Amount</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {filteredSales
+                                                    .slice()
+                                                    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+                                                    .map((sale) => (
+                                                        <tr key={sale._id} className="border-t border-slate-200">
+                                                            <td className="px-4 py-3 text-sm text-slate-500">{formatDateTime(sale.createdAt)}</td>
+                                                            <td className="px-4 py-3 text-sm font-semibold text-slate-950">{formatProductLabel(sale.productName)}</td>
+                                                            <td className="px-4 py-3 text-sm text-slate-700">{Number(sale.quantity ?? 0).toLocaleString()} KG</td>
+                                                            <td className="px-4 py-3 text-sm text-slate-500">{formatAmount(sale.rate)}</td>
+                                                            <td className="px-4 py-3 text-sm font-semibold text-slate-950">{formatAmount(sale.amount)}</td>
+                                                        </tr>
+                                                    ))
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </CardBody>
+                        </Card>
+                    </div>
+                </section>
+            </> : null}
 
             </> : null}
 
