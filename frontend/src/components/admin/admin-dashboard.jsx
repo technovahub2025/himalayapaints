@@ -1247,21 +1247,17 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                     <PieChart data={productionShareSeries} emptyLabel="No product production data is available for the current filters." />
                 </ChartFrame>
 
-                <ChartFrame title="Production Cost by Product" subtitle="Formula-derived cost by product using current raw-material rates." badge="Top 6" icon={Sparkles} className="xl:col-span-6">
+                <ChartFrame title="Production Cost by Product" subtitle="Formula-derived cost by product using current raw-material rates." badge="Top 6" icon={Sparkles} className="xl:col-span-12">
                     <HorizontalBarChart data={productionCostByProductSeries} emptyLabel="No production cost data is available for the current filters." valueLabel="amount" />
                 </ChartFrame>
 
-                 <ChartFrame title="Top Selling Products" subtitle="Shown only when sales data is supplied by the API." badge={topSellingProductsSeries.length > 0 ? "Top 6" : "Unavailable"} icon={WalletCards} className="xl:col-span-6">
-                     <HorizontalBarChart data={topSellingProductsSeries} emptyLabel="Sales data is not available in the current API response." valueLabel="amount" />
-                 </ChartFrame>
+                <ChartFrame title="Sales Trend" subtitle="Sales amount over time from the records fetched from the Sales API." badge={`${salesTrendSeries.length.toLocaleString()} point(s)`} icon={WalletCards} className="xl:col-span-7">
+                    <TrendChart series={salesTrendSeries} colorClass="stroke-fuchsia-500" emptyLabel="No sales records are available." />
+                </ChartFrame>
 
-                 <ChartFrame title="Sales Trend" subtitle="Sales amount over time from the records fetched from the Sales API." badge={`${salesTrendSeries.length.toLocaleString()} point(s)`} icon={WalletCards} className="xl:col-span-7">
-                     <TrendChart series={salesTrendSeries} colorClass="stroke-fuchsia-500" emptyLabel="No sales records are available." />
-                 </ChartFrame>
-
-                 <ChartFrame title="Sales by Product" subtitle="Top products ranked by total sales amount." badge="Top 6" icon={Package2} className="xl:col-span-5">
-                     <HorizontalBarChart data={salesByProductSeries} emptyLabel="No sales data is available." valueLabel="amount" />
-                 </ChartFrame>
+                <ChartFrame title="Sales by Product" subtitle="Top products ranked by total sales amount." badge="Top 6" icon={Package2} className="xl:col-span-5">
+                    <HorizontalBarChart data={salesByProductSeries} emptyLabel="No sales data is available." valueLabel="amount" />
+                </ChartFrame>
             </div>
             </> : null}
 
