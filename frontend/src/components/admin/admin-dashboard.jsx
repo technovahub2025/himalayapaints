@@ -1169,26 +1169,115 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                 ))}
             </div>
 
-            <div className="grid gap-6 xl:grid-cols-12">
-                <ChartFrame title="Production by Product" subtitle="Top products ranked by produced KG." badge="Top 6" icon={Package2} className="xl:col-span-5">
+            <div className="grid gap-6 lg:grid-cols-2">
+                <ChartFrame title="Production by Product" subtitle="Top products ranked by produced KG." badge="Top 6" icon={Package2}>
                     <HorizontalBarChart data={productionByProductSeries} emptyLabel="No production data is available for the current filters." valueLabel="KG" />
                 </ChartFrame>
 
-                <ChartFrame title="Raw Material Usage" subtitle="Share of material usage from production lines." badge="Top 6" icon={Layers3} className="xl:col-span-6">
+                <ChartFrame title="Raw Material Usage" subtitle="Share of material usage from production lines." badge="Top 6" icon={Layers3}>
                     <PieChart data={rawMaterialUsageSeries} emptyLabel="No raw material usage is available for the current filters." />
                 </ChartFrame>
 
-                <ChartFrame title="Product Production Share" subtitle="Share of total production KG by product." badge="Top 6" icon={Package2} className="xl:col-span-6">
+                <ChartFrame title="Product Production Share" subtitle="Share of total production KG by product." badge="Top 6" icon={Package2}>
                     <PieChart data={productionShareSeries} emptyLabel="No product production data is available for the current filters." />
                 </ChartFrame>
 
-                <ChartFrame title="Production Cost by Product" subtitle="Formula-derived cost by product using current raw-material rates." badge="Top 6" icon={Sparkles} className="xl:col-span-6">
+                <ChartFrame title="Production Cost by Product" subtitle="Formula-derived cost by product using current raw-material rates." badge="Top 6" icon={Sparkles}>
                     <HorizontalBarChart data={productionCostByProductSeries} emptyLabel="No production cost data is available for the current filters." valueLabel="amount" />
                 </ChartFrame>
 
-                <ChartFrame title="Sales by Product" subtitle="Top products ranked by total sales amount." badge={salesByProductSeries.length > 0 ? "Top 6" : "No data"} icon={WalletCards} className="xl:col-span-6">
+                <ChartFrame title="Sales by Product" subtitle="Top products ranked by total sales amount." badge={salesByProductSeries.length > 0 ? "Top 6" : "No data"} icon={WalletCards}>
                     <HorizontalBarChart data={salesByProductSeries} emptyLabel={salesError ? salesError : "No sales records saved yet."} valueLabel="amount" />
                 </ChartFrame>
+
+                {['dashboard', 'production'].includes(activeSection) ? <Card className="overflow-hidden border-slate-200/80 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.45)]">
+                    <CardHeader className="border-b border-slate-200/80 bg-white/90">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <p className="text-lg font-semibold text-slate-950">Sales History</p>
+                                <p className="text-sm text-slate-500">Recent sales records fetched from the Sales API.</p>
+                            </div>
+                            <Badge>{filteredSales.length.toLocaleString()} filtered</Badge>
+                        </div>
+                    </CardHeader>
+                    <CardBody className="space-y-4 p-4 sm:p-6">
+                        {salesError ? (
+                            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-500">
+                                {salesError}
+                            </div>
+                        ) : (
+                            <>
+                                <div className="grid gap-3 md:hidden">
+                                    {recentSales.length > 0 ? recentSales.map((sale) => (
+                                        <div key={sale._id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div>
+                                                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Product</p>
+                                                    <p className="mt-1 text-sm font-semibold text-slate-950">{formatProductLabel(sale.productName)}</p>
+                                                </div>
+                                                <p className="text-sm font-semibold text-slate-950">{formatAmount(sale.amount)}</p>
+                                            </div>
+                                            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                                                <div className="rounded-xl bg-slate-50 p-3">
+                                                    <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Quantity</p>
+                                                    <p className="mt-1 text-sm font-medium text-slate-900">{Number(sale.quantity ?? 0).toLocaleString()} KG</p>
+                                                </div>
+                                                <div className="rounded-xl bg-slate-50 p-3">
+                                                    <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Rate</p>
+                                                    <p className="mt-1 text-sm font-medium text-slate-900">{formatAmount(sale.rate)}</p>
+                                                </div>
+                                                <div className="rounded-xl bg-slate-50 p-3">
+                                                    <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Sold By</p>
+                                                    <p className="mt-1 text-sm font-medium text-slate-900">{sale.createdBy || "-"}</p>
+                                                </div>
+                                                <div className="rounded-xl bg-slate-50 p-3">
+                                                    <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Date</p>
+                                                    <p className="mt-1 text-sm font-medium text-slate-900">{formatDateTime(sale.createdAt)}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )) : (
+                                        <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
+                                            No sales data available yet.
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white hidden md:block">
+                                    <table className="min-w-[700px] sm:min-w-[780px] w-full border-collapse">
+                                        <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-[0.12em] text-slate-500 sm:text-xs sm:tracking-[0.14em]">
+                                            <tr>
+                                                <th className="px-4 py-3 font-semibold">Product</th>
+                                                <th className="px-4 py-3 font-semibold">Quantity KG</th>
+                                                <th className="px-4 py-3 font-semibold">Rate</th>
+                                                <th className="px-4 py-3 font-semibold">Amount</th>
+                                                <th className="px-4 py-3 font-semibold">Sold By</th>
+                                                <th className="px-4 py-3 font-semibold">Date</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {recentSales.length > 0 ? recentSales.map((sale) => (
+                                                <tr key={sale._id} className="border-t border-slate-200">
+                                                    <td className="px-4 py-3 text-sm font-semibold text-slate-950">{formatProductLabel(sale.productName)}</td>
+                                                    <td className="px-4 py-3 text-sm text-slate-700">{Number(sale.quantity ?? 0).toLocaleString()} KG</td>
+                                                    <td className="px-4 py-3 text-sm text-slate-500">{formatAmount(sale.rate)}</td>
+                                                    <td className="px-4 py-3 text-sm font-semibold text-slate-950">{formatAmount(sale.amount)}</td>
+                                                    <td className="px-4 py-3 text-sm text-slate-500">{sale.createdBy || "-"}</td>
+                                                    <td className="px-4 py-3 text-sm text-slate-500">{formatDateTime(sale.createdAt)}</td>
+                                                </tr>
+                                            )) : (
+                                                <tr>
+                                                    <td className="px-4 py-5 text-sm text-slate-500" colSpan={6}>
+                                                        No sales data available yet.
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </>
+                        )}
+                    </CardBody>
+                </Card> : null}
             </div>
             </> : null}
 
@@ -1391,7 +1480,7 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
             </Card>
             </> : null}
 
-            <div className={`grid gap-6 ${activeSection === "rawMaterials" ? "xl:grid-cols-1" : "xl:grid-cols-[1fr_1.15fr]"}`}>
+            <div className={`grid gap-6 ${activeSection === "rawMaterials" ? "lg:grid-cols-1" : "lg:grid-cols-2"}`}>
                 {activeSection === "rawMaterials" ? <>
                 <Card className="overflow-hidden border-slate-200/80 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.45)]">
                     <CardHeader className="border-b border-slate-200/80 bg-white/90">
@@ -1614,7 +1703,7 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                 </> : null}
 
                 {['dashboard', 'production'].includes(activeSection) ? <>
-                <Card className="overflow-hidden border-slate-200/80 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.45)]">
+                <Card className="overflow-hidden border-slate-200/80 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.45)] lg:col-span-2">
                     <CardHeader className="border-b border-slate-200/80 bg-white/90">
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <div>
@@ -1701,97 +1790,6 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                 </Card>
                 </> : null}
             </div>
-
-            {['dashboard', 'production'].includes(activeSection) ? <>
-                <Card className="overflow-hidden border-slate-200/80 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.45)]">
-                    <CardHeader className="border-b border-slate-200/80 bg-white/90">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                                <p className="text-lg font-semibold text-slate-950">Sales History</p>
-                                <p className="text-sm text-slate-500">Recent sales records fetched from the Sales API.</p>
-                            </div>
-                            <Badge>{filteredSales.length.toLocaleString()} filtered</Badge>
-                        </div>
-                    </CardHeader>
-                    <CardBody className="space-y-4 p-4 sm:p-6">
-                        {salesError ? (
-                            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-500">
-                                {salesError}
-                            </div>
-                        ) : (
-                            <>
-                                <div className="grid gap-3 md:hidden">
-                                    {recentSales.length > 0 ? recentSales.map((sale) => (
-                                        <div key={sale._id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                                            <div className="flex items-start justify-between gap-3">
-                                                <div>
-                                                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Product</p>
-                                                    <p className="mt-1 text-sm font-semibold text-slate-950">{formatProductLabel(sale.productName)}</p>
-                                                </div>
-                                                <p className="text-sm font-semibold text-slate-950">{formatAmount(sale.amount)}</p>
-                                            </div>
-                                            <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                                                <div className="rounded-xl bg-slate-50 p-3">
-                                                    <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Quantity</p>
-                                                    <p className="mt-1 text-sm font-medium text-slate-900">{Number(sale.quantity ?? 0).toLocaleString()} KG</p>
-                                                </div>
-                                                <div className="rounded-xl bg-slate-50 p-3">
-                                                    <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Rate</p>
-                                                    <p className="mt-1 text-sm font-medium text-slate-900">{formatAmount(sale.rate)}</p>
-                                                </div>
-                                                <div className="rounded-xl bg-slate-50 p-3">
-                                                    <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Sold By</p>
-                                                    <p className="mt-1 text-sm font-medium text-slate-900">{sale.createdBy || "-"}</p>
-                                                </div>
-                                                <div className="rounded-xl bg-slate-50 p-3">
-                                                    <p className="text-[11px] uppercase tracking-[0.12em] text-slate-500">Date</p>
-                                                    <p className="mt-1 text-sm font-medium text-slate-900">{formatDateTime(sale.createdAt)}</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )) : (
-                                        <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
-                                            No sales data available yet.
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white hidden md:block">
-                                    <table className="min-w-[700px] sm:min-w-[780px] w-full border-collapse">
-                                        <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-[0.12em] text-slate-500 sm:text-xs sm:tracking-[0.14em]">
-                                            <tr>
-                                                <th className="px-4 py-3 font-semibold">Product</th>
-                                                <th className="px-4 py-3 font-semibold">Quantity KG</th>
-                                                <th className="px-4 py-3 font-semibold">Rate</th>
-                                                <th className="px-4 py-3 font-semibold">Amount</th>
-                                                <th className="px-4 py-3 font-semibold">Sold By</th>
-                                                <th className="px-4 py-3 font-semibold">Date</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {recentSales.length > 0 ? recentSales.map((sale) => (
-                                                <tr key={sale._id} className="border-t border-slate-200">
-                                                    <td className="px-4 py-3 text-sm font-semibold text-slate-950">{formatProductLabel(sale.productName)}</td>
-                                                    <td className="px-4 py-3 text-sm text-slate-700">{Number(sale.quantity ?? 0).toLocaleString()} KG</td>
-                                                    <td className="px-4 py-3 text-sm text-slate-500">{formatAmount(sale.rate)}</td>
-                                                    <td className="px-4 py-3 text-sm font-semibold text-slate-950">{formatAmount(sale.amount)}</td>
-                                                    <td className="px-4 py-3 text-sm text-slate-500">{sale.createdBy || "-"}</td>
-                                                    <td className="px-4 py-3 text-sm text-slate-500">{formatDateTime(sale.createdAt)}</td>
-                                                </tr>
-                                            )) : (
-                                                <tr>
-                                                    <td className="px-4 py-5 text-sm text-slate-500" colSpan={6}>
-                                                        No sales data available yet.
-                                                    </td>
-                                                </tr>
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </>
-                        )}
-                    </CardBody>
-                </Card>
-            </> : null}
 
             </> : null}
 
