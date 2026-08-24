@@ -3,12 +3,13 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileSpreadsheet, FileText, LoaderCircle, Pencil, Printer, RefreshCw, Save, ChevronDown, Download } from "lucide-react";
 import { calculateGrandTotal, safePercent, scaleQuantity } from "@/lib/calculations";
-import { Button, Card, CardBody, CardHeader, Input, Subtitle, Title } from "@/components/ui";
+import { Button, Badge, Card, CardBody, CardHeader, Input, Subtitle, Title } from "@/components/ui";
 import { SummaryCards } from "@/components/summary-cards";
 import { ProductSelector } from "@/components/user/product-selector";
 import { RawMaterialTable } from "@/components/user/raw-material-table";
 import { PackSizeTable } from "@/components/user/pack-size-table";
 import { formatProductLabel } from "@/lib/product-label";
+import { apiFetch } from "@/services/api-client";
 import { toast } from "sonner";
 const EMPTY_BATCH_DETAILS = {
     product: "",
@@ -31,12 +32,16 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
      const [actuals, setActuals] = useState({});
      const [remarks, setRemarks] = useState({});
      const [signatures, setSignatures] = useState({});
-     const [exportOpen, setExportOpen] = useState(false);
-     const exportMenuRef = useRef(null);
-     const [packRows, setPackRows] = useState(EMPTY_PACK_ROWS);
+    const [exportOpen, setExportOpen] = useState(false);
+    const exportMenuRef = useRef(null);
+    const [packRows, setPackRows] = useState(EMPTY_PACK_ROWS);
     const [batchDetails, setBatchDetails] = useState(EMPTY_BATCH_DETAILS);
     const [loading, setLoading] = useState(false);
-     const [savingProduction, setSavingProduction] = useState(false);
+    const [savingProduction, setSavingProduction] = useState(false);
+    const [detailsType, setDetailsType] = useState("product");
+    const [rawMaterials, setRawMaterials] = useState([]);
+    const [rawMaterialsLoading, setRawMaterialsLoading] = useState(false);
+    const [rawMaterialsError, setRawMaterialsError] = useState(null);
      const restoringDraftRef = useRef(null);
      const batchNoLoadedRef = useRef(false);
      const [batchNoEditable, setBatchNoEditable] = useState(false);
@@ -127,6 +132,26 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
             return;
         saveCurrentDraft(tableName);
     }, [actuals, batchDetails, manualKgValues, packRows, remarks, signatures, tableName, targetKg]);
+
+    useEffect(() => {
+        if (detailsType !== "rawMaterial" || rawMaterials.length > 0) {
+            return;
+        }
+        async function fetchRawMaterials() {
+            setRawMaterialsLoading(true);
+            setRawMaterialsError(null);
+            try {
+                const data = await apiFetch("/api/admin/raw-materials?limit=100");
+                setRawMaterials(Array.isArray(data.materials) ? data.materials : []);
+            } catch (error) {
+                setRawMaterialsError(error instanceof Error ? error.message : "Failed to load raw materials");
+                setRawMaterials([]);
+            } finally {
+                setRawMaterialsLoading(false);
+            }
+        }
+        void fetchRawMaterials();
+    }, [detailsType, rawMaterials.length]);
     function updateBatchDetail(key, value) {
         setBatchDetails((current) => ({
             ...current,
@@ -672,8 +697,30 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
     return (<div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-2xl">
-          <Title className="text-2xl sm:text-3xl">User Dashboard</Title>
-          <Subtitle className="text-sm sm:text-base">Read-only master data from admin with live percentage distribution and production outputs.</Subtitle>
+          <div className="mb-2 flex w-fit items-center gap-1 rounded-full border border-line bg-white/80 p-1">
+            <Button
+              variant={detailsType === "product" ? "primary" : "secondary"}
+              className="rounded-full px-4 py-1.5 text-xs font-medium"
+              onClick={() => setDetailsType("product")}
+            >
+              Product Details
+            </Button>
+            <Button
+              variant={detailsType === "rawMaterial" ? "primary" : "secondary"}
+              className="rounded-full px-4 py-1.5 text-xs font-medium"
+              onClick={() => setDetailsType("rawMaterial")}
+            >
+              Raw Material Details
+            </Button>
+          </div>
+          <Title className="text-2xl sm:text-3xl">
+            {detailsType === "rawMaterial" ? "Raw Material Details" : "Product Details"}
+          </Title>
+          <Subtitle className="text-sm sm:text-base">
+            {detailsType === "rawMaterial"
+              ? "Raw material master data fetched from the existing database."
+              : "Read-only master data from admin with live percentage distribution and production outputs."}
+          </Subtitle>
           {email ? <p className="mt-2 text-sm text-muted">Signed in as {email}</p> : null}
         </div>
         <div className="w-full max-w-none rounded-3xl border border-line bg-white/80 p-3 shadow-sm backdrop-blur print:hidden sm:p-4 lg:max-w-4xl">
@@ -727,17 +774,19 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
         </div>
       </div>
 
-      <SummaryCards items={[
+      {detailsType === "product" ? (
+        <>
+        <SummaryCards items={[
             { label: "Sources", value: String(items.length), hint: "Admin item names available to the user" },
             { label: "Master Qty", value: `${totalQuantity.toLocaleString()} KG`, hint: "Total quantity from admin data" },
             { label: "Target KG", value: `${Number(targetKg || 0).toLocaleString()} KG`, hint: "Used for the ratio distribution" },
             { label: "Master Amount", value: totalAmount.toLocaleString(), hint: "Stored amount sum from admin data" }
         ]}/>
 
-      <Card className="border-border bg-white shadow-sm rounded-2xl p-4 sm:p-6">
-        <div className="mb-5 pb-4 border-b border-border">
-          <h3 className="text-[18px] font-semibold text-slate-900">Batch Details</h3>
-        </div>
+        <Card className="border-border bg-white shadow-sm rounded-2xl p-4 sm:p-6">
+          <div className="mb-5 pb-4 border-b border-border">
+            <h3 className="text-[18px] font-semibold text-slate-900">Batch Details</h3>
+          </div>
         <div className="grid gap-4 sm:gap-6" style={{ gridTemplateColumns: "repeat(12, minmax(0, 1fr))" }}>
            <div className="col-span-12 sm:col-span-6 xl:col-span-4">
              <label htmlFor="batch-no" className="block text-[13px] font-medium text-slate-700 mb-2">Batch No</label>
@@ -817,10 +866,66 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
             />
           </div>
         </div>
-      </Card>
+        </Card>
 
-      <RawMaterialTable actuals={actuals} distributedTotal={distributedTotal} items={items} manualKgValues={manualKgValues} onActualChange={handleActualChange} onManualKgChange={handleManualKgChange} onRemarkChange={handleRemarkChange} onSignatureChange={handleSignatureChange} onTargetKgChange={handleTargetKgChange} remarks={remarks} signatures={signatures} targetKg={targetKg}/>
+        <RawMaterialTable actuals={actuals} distributedTotal={distributedTotal} items={items} manualKgValues={manualKgValues} onActualChange={handleActualChange} onManualKgChange={handleManualKgChange} onRemarkChange={handleRemarkChange} onSignatureChange={handleSignatureChange} onTargetKgChange={handleTargetKgChange} remarks={remarks} signatures={signatures} targetKg={targetKg}/>
 
-      <PackSizeTable onAddRow={handleAddPackRow} onDeleteRow={handleDeletePackRow} onPackSizeChange={handlePackSizeChange} onQuantityChange={handlePackQuantityChange} packGrandTotal={packGrandTotal} packRows={packRows}/>
+        <PackSizeTable onAddRow={handleAddPackRow} onDeleteRow={handleDeletePackRow} onPackSizeChange={handlePackSizeChange} onQuantityChange={handlePackQuantityChange} packGrandTotal={packGrandTotal} packRows={packRows}/>
+      </>,
+      ) : null}
+
+      {detailsType === "rawMaterial" ? (
+        <Card className="border-border bg-white shadow-sm rounded-2xl p-4 sm:p-6">
+          <div className="mb-5 flex items-center justify-between pb-4 border-b border-border">
+            <h3 className="text-[18px] font-semibold text-slate-900">Raw Material Details</h3>
+            {rawMaterials.length > 0 && <Badge>{rawMaterials.length.toLocaleString()} materials</Badge>}
+          </div>
+          {rawMaterialsLoading ? (
+            <div className="flex items-center gap-3 text-sm text-muted">
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+              Loading raw materials...
+            </div>
+          ) : rawMaterialsError ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-500">
+              {rawMaterialsError}
+            </div>
+          ) : rawMaterials.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-500">
+              No raw material records are available.
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-slate-200">
+              <table className="w-full border-collapse">
+                <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-[0.12em] text-slate-500 sm:text-xs sm:tracking-[0.14em]">
+                  <tr>
+                    <th className="px-4 py-3 font-semibold">Code</th>
+                    <th className="px-4 py-3 font-semibold">Raw Material</th>
+                    <th className="px-4 py-3 font-semibold">Quantity</th>
+                    <th className="px-4 py-3 font-semibold">Rate</th>
+                    <th className="px-4 py-3 font-semibold">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rawMaterials.map((material) => {
+                    const quantity = Number(material.quantity ?? 0);
+                    const rate = Number(material.rate ?? 0);
+                    const amount = Number((quantity * rate).toFixed(2));
+                    return (
+                      <tr key={material.code} className="border-t border-slate-200">
+                        <td className="px-4 py-3 text-sm font-semibold text-slate-950">{material.code || "-"}</td>
+                        <td className="px-4 py-3 text-sm text-slate-700">{material.name || "-"}</td>
+                        <td className="px-4 py-3 text-sm text-slate-700">{quantity.toLocaleString()} KG</td>
+                        <td className="px-4 py-3 text-sm text-slate-500">{rate.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-sm font-semibold text-slate-950">{amount.toLocaleString()}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>,
+      ) : null}
+
     </div>);
 }
