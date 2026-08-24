@@ -475,7 +475,6 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
     const [itemRows, setItemRows] = useState(() => initialItems.map(createItemDraft));
     const [rawMaterials, setRawMaterials] = useState([]);
     const [productionBatches, setProductionBatches] = useState([]);
-    const [sales, setSales] = useState([]);
     const [materialSearch, setMaterialSearch] = useState("");
     const [loading, setLoading] = useState(true);
     const [savingItems, setSavingItems] = useState(false);
@@ -617,10 +616,6 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
         };
     }, [analyticsDatePreset, analyticsMaterialFilter, analyticsProductFilter, filteredProductionRows, rawMaterials.length, tableOptions]);
 
-    const salesTotalAmount = useMemo(() => sum(sales.map((sale) => sale.amount ?? 0)), [sales]);
-    const salesTrendSeries = useMemo(() => buildTrendSeries(sales, (sale) => sale.createdAt, (sale) => sale.amount), [sales]);
-    const salesByProductSeries = useMemo(() => buildSeries(sales, (sale) => formatProductLabel(sale.productName), (sale) => sale.amount, 6), [sales]);
-
     useEffect(() => {
         setSelectedTableName(initialTableName);
         setItemRows(initialItems.map(createItemDraft));
@@ -642,12 +637,11 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
     async function loadDashboardData(nextTableName = selectedTableName) {
         setLoading(true);
         try {
-            const [itemsData, tablesData, materialsData, productionData, salesData] = await Promise.all([
+            const [itemsData, tablesData, materialsData, productionData] = await Promise.all([
                 apiFetch(`/api/admin/items?tableName=${encodeURIComponent(nextTableName)}`),
                 apiFetch("/api/admin/tables"),
                 apiFetch("/api/admin/raw-materials?limit=100"),
-                apiFetch("/api/production"),
-                apiFetch("/api/sales")
+                apiFetch("/api/production")
             ]);
             const nextItems = Array.isArray(itemsData.items) ? itemsData.items.map(createItemDraft) : [];
             const nextTables = Array.isArray(tablesData.tables) ? tablesData.tables.map((table) => table.name).filter(Boolean) : [];
@@ -656,7 +650,6 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
             setTableOptions(Array.from(new Set([nextTableName, ...nextTables])).sort());
             setRawMaterials(Array.isArray(materialsData.materials) ? materialsData.materials : []);
             setProductionBatches(Array.isArray(productionData.batches) ? productionData.batches : []);
-            setSales(Array.isArray(salesData.sales) ? salesData.sales : []);
         }
         catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to load admin dashboard");
@@ -671,14 +664,12 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
     async function loadAnalyticsData() {
         setLoading(true);
         try {
-            const [materialsData, productionData, salesData] = await Promise.all([
+            const [materialsData, productionData] = await Promise.all([
                 apiFetch("/api/admin/raw-materials?limit=100"),
-                apiFetch("/api/production"),
-                apiFetch("/api/sales")
+                apiFetch("/api/production")
             ]);
             setRawMaterials(Array.isArray(materialsData.materials) ? materialsData.materials : []);
             setProductionBatches(Array.isArray(productionData.batches) ? productionData.batches : []);
-            setSales(Array.isArray(salesData.sales) ? salesData.sales : []);
         }
         catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to load analytics data");
@@ -1091,8 +1082,8 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
         },
         {
             label: "Total Sales",
-            value: formatAmount(salesTotalAmount),
-            hint: sales.length > 0 ? `From ${sales.length} sale record(s)` : "No sales records found",
+            value: analyticsTotals.sales === null ? "—" : formatAmount(analyticsTotals.sales),
+            hint: analyticsTotals.sales === null ? "Sales data is not available in the current API" : "Sales from live production records",
             icon: WalletCards,
             accent: "from-violet-50 to-white"
         }
@@ -1247,16 +1238,12 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                     <PieChart data={productionShareSeries} emptyLabel="No product production data is available for the current filters." />
                 </ChartFrame>
 
-                <ChartFrame title="Production Cost by Product" subtitle="Formula-derived cost by product using current raw-material rates." badge="Top 6" icon={Sparkles} className="xl:col-span-12">
+                <ChartFrame title="Production Cost by Product" subtitle="Formula-derived cost by product using current raw-material rates." badge="Top 6" icon={Sparkles} className="xl:col-span-6">
                     <HorizontalBarChart data={productionCostByProductSeries} emptyLabel="No production cost data is available for the current filters." valueLabel="amount" />
                 </ChartFrame>
 
-                <ChartFrame title="Sales Trend" subtitle="Sales amount over time from the records fetched from the Sales API." badge={`${salesTrendSeries.length.toLocaleString()} point(s)`} icon={WalletCards} className="xl:col-span-7">
-                    <TrendChart series={salesTrendSeries} colorClass="stroke-fuchsia-500" emptyLabel="No sales records are available." />
-                </ChartFrame>
-
-                <ChartFrame title="Sales by Product" subtitle="Top products ranked by total sales amount." badge="Top 6" icon={Package2} className="xl:col-span-5">
-                    <HorizontalBarChart data={salesByProductSeries} emptyLabel="No sales data is available." valueLabel="amount" />
+                <ChartFrame title="Top Selling Products" subtitle="Shown only when sales data is supplied by the API." badge={topSellingProductsSeries.length > 0 ? "Top 6" : "Unavailable"} icon={WalletCards} className="xl:col-span-6">
+                    <HorizontalBarChart data={topSellingProductsSeries} emptyLabel="Sales data is not available in the current API response." valueLabel="amount" />
                 </ChartFrame>
             </div>
             </> : null}
@@ -1769,7 +1756,6 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                     </CardBody>
                 </Card>
                 </> : null}
-
             </div>
 
             </> : null}
