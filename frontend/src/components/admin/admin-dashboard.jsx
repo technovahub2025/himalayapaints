@@ -695,9 +695,10 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
 
     async function refreshSalesData() {
         try {
-            const salesData = await apiFetch("/api/sales");
+            const salesData = await apiFetch("/api/sales", { cache: "no-store" });
             setSales(Array.isArray(salesData.sales) ? salesData.sales : []);
             setSalesError(null);
+            toast.success("Sales data refreshed");
         } catch (error) {
             setSalesError(error instanceof Error ? error.message : "Failed to load sales data");
             setSales([]);
