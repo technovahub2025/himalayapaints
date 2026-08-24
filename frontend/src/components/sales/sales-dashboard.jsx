@@ -134,7 +134,7 @@ export function SalesDashboard({ email }) {
       </div>
       <SummaryCards items={[
             { label: "Selected Product", value: selectedProduct || "—", hint: "Product for this sale" },
-            { label: "Rate per KG", value: formatCurrency(rate), hint: "Derived from product master data" },
+            { label: "Rate per KG", value: formatCurrency(rate), hint: "Auto-filled from product data" },
             { label: "Quantity (KG)", value: quantity ? `${Number(quantity).toLocaleString("en-IN")} KG` : "—", hint: "Quantity entered" },
             { label: "Total Amount", value: formatCurrency(amount), hint: "Quantity × Rate" }
         ]}/>
@@ -175,9 +175,13 @@ export function SalesDashboard({ email }) {
             <label htmlFor="sale-rate" className="block text-[13px] font-medium text-slate-700 mb-2">Rate per KG</label>
             <Input
               id="sale-rate"
-              value={formatCurrency(rate)}
-              readOnly
-              className="h-11.5 rounded-xl border-border bg-slate-100 text-slate-500"
+              type="number"
+              min="0"
+              step="0.01"
+              value={rate === 0 ? "" : rate}
+              onChange={(e) => setRate(Number(e.target.value) || 0)}
+              placeholder="0.00"
+              className="h-11.5 rounded-xl border-border bg-white placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
             />
           </div>
           <div className="col-span-12">
