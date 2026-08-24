@@ -132,6 +132,24 @@ export function AppShell({ role, children, email, tableName }) {
         </aside>
 
         <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+          {role === "admin" && location.pathname === "/admin" ? <header className="mb-6 rounded-[2rem] border border-slate-200/80 bg-white/90 p-4 shadow-[0_18px_60px_-48px_rgba(15,23,42,0.45)] backdrop-blur sm:mb-7 sm:p-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">Admin</p>
+                <h1 className="mt-1 text-xl font-semibold tracking-tight text-slate-950 sm:text-2xl">Admin workspace</h1>
+              </div>
+              <div className="flex flex-wrap gap-2 sm:justify-end">
+                <Button variant="secondary" className="rounded-full px-5 py-2 text-sm font-medium" onClick={() => navigate("/admin?section=products")}>
+                  <Package2 className="mr-2 h-4 w-4" />
+                  Products
+                </Button>
+                <Button variant="secondary" className="rounded-full px-5 py-2 text-sm font-medium" onClick={() => navigate("/admin?section=rawMaterials")}>
+                  <Layers3 className="mr-2 h-4 w-4" />
+                  Raw Materials
+                </Button>
+              </div>
+            </div>
+          </header> : null}
           {children}
         </main>
       </div>
