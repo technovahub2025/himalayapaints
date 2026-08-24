@@ -1271,6 +1271,17 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                 ))}
             </div>
 
+            <div className="flex flex-wrap gap-2">
+                <Button variant="secondary" onClick={() => navigate("/admin?section=products")}>
+                    <Package2 className="mr-2 h-4 w-4" />
+                    Products
+                </Button>
+                <Button variant="secondary" onClick={() => navigate("/admin?section=rawMaterials")}>
+                    <Layers3 className="mr-2 h-4 w-4" />
+                    Raw Materials
+                </Button>
+            </div>
+
             <div className="grid gap-6 lg:grid-cols-2">
                 <ChartFrame title="Production by Product" subtitle="Top products ranked by produced KG." badge="Top 6" icon={Package2}>
                     <HorizontalBarChart data={productionByProductSeries} emptyLabel="No production data is available for the current filters." valueLabel="KG" />
