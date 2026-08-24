@@ -11,6 +11,7 @@ import adminUserRoutes from "./routes/adminUserRoutes.js";
 import tableRoutes from "./routes/tableRoutes.js";
 import rawMaterialRoutes from "./routes/rawMaterialRoutes.js";
 import productionRoutes from "./routes/productionRoutes.js";
+import saleRoutes from "./routes/saleRoutes.js";
 import stockRoutes from "./routes/stockRoutes.js";
 dotenv.config();
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -64,6 +65,7 @@ export function createApp() {
     app.use("/api/admin/tables", tableRoutes);
     app.use("/api/admin/raw-materials", rawMaterialRoutes);
     app.use("/api/production", productionRoutes);
+    app.use("/api/sales", saleRoutes);
     app.use("/api/stock", stockRoutes);
     app.get("/health", (_req, res) => {
         res.json({ ok: true });
