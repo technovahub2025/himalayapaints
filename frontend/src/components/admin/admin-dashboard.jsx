@@ -618,8 +618,6 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
     }, [analyticsDatePreset, analyticsMaterialFilter, analyticsProductFilter, filteredProductionRows, rawMaterials.length, tableOptions]);
 
     const salesTotalAmount = useMemo(() => sum(sales.map((sale) => sale.amount ?? 0)), [sales]);
-    const salesTotalQuantity = useMemo(() => sum(sales.map((sale) => sale.quantity ?? 0)), [sales]);
-    const recentSales = useMemo(() => sales.slice(0, 5), [sales]);
     const salesTrendSeries = useMemo(() => buildTrendSeries(sales, (sale) => sale.createdAt, (sale) => sale.amount), [sales]);
     const salesByProductSeries = useMemo(() => buildSeries(sales, (sale) => formatProductLabel(sale.productName), (sale) => sale.amount, 6), [sales]);
 
@@ -1093,8 +1091,8 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
         },
         {
             label: "Total Sales",
-            value: analyticsTotals.sales === null ? "—" : formatAmount(analyticsTotals.sales),
-            hint: analyticsTotals.sales === null ? "Sales data is not available in the current API" : "Sales from live production records",
+            value: formatAmount(salesTotalAmount),
+            hint: sales.length > 0 ? `From ${sales.length} sale record(s)` : "No sales records found",
             icon: WalletCards,
             accent: "from-violet-50 to-white"
         }
@@ -1253,9 +1251,17 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                     <HorizontalBarChart data={productionCostByProductSeries} emptyLabel="No production cost data is available for the current filters." valueLabel="amount" />
                 </ChartFrame>
 
-                <ChartFrame title="Top Selling Products" subtitle="Shown only when sales data is supplied by the API." badge={topSellingProductsSeries.length > 0 ? "Top 6" : "Unavailable"} icon={WalletCards} className="xl:col-span-6">
-                    <HorizontalBarChart data={topSellingProductsSeries} emptyLabel="Sales data is not available in the current API response." valueLabel="amount" />
-                </ChartFrame>
+                 <ChartFrame title="Top Selling Products" subtitle="Shown only when sales data is supplied by the API." badge={topSellingProductsSeries.length > 0 ? "Top 6" : "Unavailable"} icon={WalletCards} className="xl:col-span-6">
+                     <HorizontalBarChart data={topSellingProductsSeries} emptyLabel="Sales data is not available in the current API response." valueLabel="amount" />
+                 </ChartFrame>
+
+                 <ChartFrame title="Sales Trend" subtitle="Sales amount over time from the records fetched from the Sales API." badge={`${salesTrendSeries.length.toLocaleString()} point(s)`} icon={WalletCards} className="xl:col-span-7">
+                     <TrendChart series={salesTrendSeries} colorClass="stroke-fuchsia-500" emptyLabel="No sales records are available." />
+                 </ChartFrame>
+
+                 <ChartFrame title="Sales by Product" subtitle="Top products ranked by total sales amount." badge="Top 6" icon={Package2} className="xl:col-span-5">
+                     <HorizontalBarChart data={salesByProductSeries} emptyLabel="No sales data is available." valueLabel="amount" />
+                 </ChartFrame>
             </div>
             </> : null}
 
@@ -1764,91 +1770,6 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                                 </div>
                             </div>
                         </div>
-                    </CardBody>
-                </Card>
-                </> : null}
-
-                {activeSection === "sales" ? <>
-                <Card className="overflow-hidden border-slate-200/80 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.45)]">
-                    <CardHeader className="border-b border-slate-200/80 bg-white/90">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                                <p className="text-lg font-semibold text-slate-950">Sales Overview</p>
-                                <p className="text-sm text-slate-500">Recent sales records from the Sales API.</p>
-                            </div>
-                            <Badge>{sales.length.toLocaleString()} sale(s)</Badge>
-                        </div>
-                    </CardHeader>
-                    <CardBody className="space-y-4 p-4 sm:p-6">
-                        <div className="grid gap-3 sm:grid-cols-3">
-                            <div className="rounded-2xl bg-slate-50 p-3">
-                                <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Total Sales Amount</p>
-                                <p className="mt-1 font-semibold text-slate-950">{formatAmount(salesTotalAmount)}</p>
-                            </div>
-                            <div className="rounded-2xl bg-slate-50 p-3">
-                                <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Total Quantity (KG)</p>
-                                <p className="mt-1 font-semibold text-slate-950">{salesTotalQuantity.toLocaleString()} KG</p>
-                            </div>
-                            <div className="rounded-2xl bg-slate-50 p-3">
-                                <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">No. of Sales</p>
-                                <p className="mt-1 font-semibold text-slate-950">{sales.length.toLocaleString()}</p>
-                            </div>
-                        </div>
-                        <div className="grid gap-6 xl:grid-cols-12">
-                            <ChartFrame title="Sales Trend" subtitle="Sales amount over time from the records fetched from the API." badge={`${salesTrendSeries.length.toLocaleString()} point(s)`} icon={WalletCards} className="xl:col-span-7">
-                                <TrendChart series={salesTrendSeries} colorClass="stroke-fuchsia-500" emptyLabel="No sales data is available for the selected time range." />
-                            </ChartFrame>
-                            <ChartFrame title="Sales by Product" subtitle="Top products ranked by total sales amount." badge="Top 6" icon={Package2} className="xl:col-span-5">
-                                <HorizontalBarChart data={salesByProductSeries} emptyLabel="No sales data is available." valueLabel="amount" />
-                            </ChartFrame>
-                        </div>
-                        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
-                            <table className="min-w-[700px] sm:min-w-[780px] w-full border-collapse">
-                                <thead className="bg-slate-50 text-left text-[11px] uppercase tracking-[0.12em] text-slate-500 sm:text-xs sm:tracking-[0.14em]">
-                                    <tr>
-                                        <th className="px-4 py-3 font-semibold">Product</th>
-                                        <th className="px-4 py-3 font-semibold">Quantity (KG)</th>
-                                        <th className="px-4 py-3 font-semibold">Rate</th>
-                                        <th className="px-4 py-3 font-semibold">Amount</th>
-                                        <th className="px-4 py-3 font-semibold">Created By</th>
-                                        <th className="px-4 py-3 font-semibold">Created At</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {sales.length > 0 ? sales.map((sale) => (
-                                        <tr key={sale._id} className="border-t border-slate-200">
-                                            <td className="px-4 py-3 text-sm font-semibold text-slate-950">{formatProductLabel(sale.productName)}</td>
-                                            <td className="px-4 py-3 text-sm text-slate-700">{Number(sale.quantity ?? 0).toLocaleString()} KG</td>
-                                            <td className="px-4 py-3 text-sm text-slate-500">{formatAmount(sale.rate)}</td>
-                                            <td className="px-4 py-3 text-sm font-semibold text-slate-950">{formatAmount(sale.amount)}</td>
-                                            <td className="px-4 py-3 text-sm text-slate-500">{sale.createdBy || "-"}</td>
-                                            <td className="px-4 py-3 text-sm text-slate-500">{formatDateTime(sale.createdAt)}</td>
-                                        </tr>
-                                    )) : (
-                                        <tr>
-                                            <td className="px-4 py-5 text-sm text-slate-500" colSpan={6}>
-                                                No sales records saved yet.
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                        {recentBatches.length > 0 ? (
-                            <div className="rounded-3xl border border-slate-200 bg-[linear-gradient(180deg,rgba(15,118,110,0.08),rgba(255,255,255,0.92))] p-5">
-                                <div className="flex items-start gap-3">
-                                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-teal-50 text-teal-700">
-                                        <Clock3 className="h-5 w-5" />
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-semibold text-slate-950">Active table snapshot</p>
-                                        <p className="mt-1 text-sm text-slate-500">
-                                            {selectedTableName} currently has {itemRows.length.toLocaleString()} item row(s), {currentQuantityTotal.toLocaleString()} total quantity, and {currentAmountTotal.toLocaleString()} total amount.
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        ) : null}
                     </CardBody>
                 </Card>
                 </> : null}
