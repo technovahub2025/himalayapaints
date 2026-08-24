@@ -1813,7 +1813,7 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                                     Sales data from the existing Sales API. Summary cards, trend and product breakdowns update with the active filters.
                                 </Subtitle>
                             </div>
-                            <Button variant="secondary" onClick={refreshSalesData} disabled={salesError === null && sales.length > 0 && !loading}>
+                            <Button variant="secondary" onClick={refreshSalesData} disabled={loading}>
                                 <RefreshCw className="mr-2 h-4 w-4" />
                                 Refresh
                             </Button>
