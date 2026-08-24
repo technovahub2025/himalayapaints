@@ -26,16 +26,6 @@ function normalizeDateValue(value) {
     return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function getDateKey(value) {
-    const date = normalizeDateValue(value);
-    return date ? date.toISOString().slice(0, 10) : "";
-}
-
-function formatShortDate(value) {
-    const date = normalizeDateValue(value);
-    return date ? date.toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) : "-";
-}
-
 function formatAmount(value) {
     return NUMBER_FORMAT.format(Number(value ?? 0));
 }
@@ -113,46 +103,6 @@ function buildSeries(records, getKey, getValue, limit = Infinity) {
         .slice(0, limit);
 }
 
-function buildTrendSeries(records, getDate, getValue) {
-    const grouped = new Map();
-    for (const record of records) {
-        const key = getDateKey(getDate(record));
-        if (!key) {
-            continue;
-        }
-        grouped.set(key, (grouped.get(key) ?? 0) + Number(getValue(record) ?? 0));
-    }
-    return Array.from(grouped.entries())
-        .map(([key, value]) => ({
-        key,
-        label: formatShortDate(key),
-        value: Number(value.toFixed(2))
-    }))
-        .sort((left, right) => left.key.localeCompare(right.key));
-}
-
-function createPolylinePoints(series, width, height, padding) {
-    if (series.length === 0) {
-        return "";
-    }
-    if (series.length === 1) {
-        const singleX = width / 2;
-        const singleY = height - padding.bottom;
-        return `${singleX},${singleY}`;
-    }
-    const values = series.map((entry) => Number(entry.value ?? 0));
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const span = max - min || 1;
-    const xStep = (width - padding.left - padding.right) / (series.length - 1);
-    return series.map((entry, index) => {
-        const x = padding.left + index * xStep;
-        const normalized = (Number(entry.value ?? 0) - min) / span;
-        const y = height - padding.bottom - normalized * (height - padding.top - padding.bottom);
-        return `${x},${y}`;
-    }).join(" ");
-}
-
 function MetricCard({ icon: Icon, label, value, hint, accent = "from-teal-50 to-white" }) {
     return (
         <Card className="overflow-hidden border-slate-200/80 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.45)]">
@@ -219,50 +169,6 @@ function HorizontalBarChart({ data, emptyLabel, valueLabel }) {
                     </div>
                 );
             })}
-        </div>
-    );
-}
-
-function TrendChart({ series, colorClass = "stroke-teal-500", emptyLabel = "No data for the selected filters." }) {
-    if (series.length === 0) {
-        return <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-sm text-slate-500">{emptyLabel}</div>;
-    }
-    const width = 720;
-    const height = 280;
-    const padding = { top: 24, right: 24, bottom: 42, left: 24 };
-    const points = createPolylinePoints(series, width, height, padding);
-    const values = series.map((entry) => Number(entry.value ?? 0));
-    const maxValue = Math.max(...values, 1);
-    const labelStep = series.length > 8 ? Math.ceil(series.length / 6) : 1;
-    return (
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-            <svg viewBox={`0 0 ${width} ${height}`} className="h-[250px] w-full">
-                <defs>
-                    <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="rgba(13,148,136,0.28)" />
-                        <stop offset="100%" stopColor="rgba(13,148,136,0.02)" />
-                    </linearGradient>
-                </defs>
-                {[0.25, 0.5, 0.75, 1].map((fraction) => {
-                    const y = padding.top + (height - padding.top - padding.bottom) * fraction;
-                    return <line key={fraction} x1={padding.left} x2={width - padding.right} y1={y} y2={y} stroke="rgba(148,163,184,0.22)" strokeDasharray="4 6" />;
-                })}
-                <polygon points={`${points} ${width - padding.right},${height - padding.bottom} ${padding.left},${height - padding.bottom}`} fill="url(#chartFill)" stroke="none" />
-                <polyline points={points} fill="none" className={`stroke-[3] ${colorClass}`} strokeLinecap="round" strokeLinejoin="round" />
-                {series.map((entry, index) => {
-                    const xStep = series.length > 1 ? (width - padding.left - padding.right) / (series.length - 1) : 0;
-                    const x = series.length === 1 ? width / 2 : padding.left + index * xStep;
-                    const span = maxValue || 1;
-                    const y = height - padding.bottom - (Number(entry.value ?? 0) / span) * (height - padding.top - padding.bottom);
-                    const showLabel = index === 0 || index === series.length - 1 || index % labelStep === 0;
-                    return (
-                        <g key={entry.key ?? entry.label}>
-                            <circle cx={x} cy={y} r="5" fill="white" stroke="rgb(15 118 110)" strokeWidth="3" />
-                            {showLabel ? <text x={x} y={height - 14} textAnchor="middle" className="fill-slate-500 text-[11px]">{entry.label}</text> : null}
-                        </g>
-                    );
-                })}
-            </svg>
         </div>
     );
 }
@@ -586,7 +492,6 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
         }).filter((batch) => batch.matchesDate && batch.matchesProduct && batch.matchesMaterial);
     }, [analyticsDateFrom, analyticsDatePreset, analyticsDateTo, analyticsMaterialFilter, analyticsProductFilter, productionBatches, rawMaterialLookup]);
     const recentBatches = useMemo(() => filteredProductionRows.slice(0, 5), [filteredProductionRows]);
-    const productionTrendSeries = useMemo(() => buildTrendSeries(filteredProductionRows, (batch) => batch.batchDate, (batch) => batch.batchKg), [filteredProductionRows]);
     const productionByProductSeries = useMemo(() => buildSeries(filteredProductionRows, (batch) => formatProductLabel(batch.productName), (batch) => batch.batchKg, 6), [filteredProductionRows]);
     const productionShareSeries = useMemo(() => buildSeries(filteredProductionRows, (batch) => formatProductLabel(batch.productName), (batch) => batch.batchKg, 6), [filteredProductionRows]);
     const productionCostByProductSeries = useMemo(() => buildSeries(filteredProductionRows, (batch) => formatProductLabel(batch.productName), (batch) => batch.batchAmount, 6), [filteredProductionRows]);
@@ -1222,10 +1127,6 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
             </div>
 
             <div className="grid gap-6 xl:grid-cols-12">
-                <ChartFrame title="Production Trend" subtitle="Production KG over time from the filtered batch set." badge={`${productionTrendSeries.length.toLocaleString()} point(s)`} icon={TrendingUp} className="xl:col-span-7">
-                    <TrendChart series={productionTrendSeries} />
-                </ChartFrame>
-
                 <ChartFrame title="Production by Product" subtitle="Top products ranked by produced KG." badge="Top 6" icon={Package2} className="xl:col-span-5">
                     <HorizontalBarChart data={productionByProductSeries} emptyLabel="No production data is available for the current filters." valueLabel="KG" />
                 </ChartFrame>
