@@ -1,7 +1,7 @@
 "use client";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { BarChart3, Calculator, ClipboardList, Layers3, LogOut, Menu, Package2, ShoppingCart, Settings, ShieldCheck, Users, X } from "lucide-react";
+import { BarChart3, Calculator, ClipboardList, Layers3, LogOut, Menu, Package2, ShoppingCart, Settings, ShieldCheck, Users, WalletCards, X } from "lucide-react";
 import { Button, cx } from "@/components/ui";
 import { useAuthSessionContext } from "@/components/providers";
 import { SiteFooter } from "@/components/site-footer";
@@ -13,6 +13,7 @@ const navItems = {
         { href: "/user", label: "User View", icon: Users },
         { href: "/sales", label: "Sales", icon: ShoppingCart },
         { href: "/admin", section: "dashboard", label: "Dashboard", icon: BarChart3 },
+        { href: "/admin", section: "sales", label: "Sales Dashboard", icon: WalletCards },
         { href: "/tracking", label: "Production History", icon: ClipboardList },
         { href: "/admin", section: "settings", label: "Settings", icon: Settings }
     ],

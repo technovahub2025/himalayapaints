@@ -13,7 +13,7 @@ function getTableName(search) {
 }
 function getSection(search) {
     const section = new URLSearchParams(search).get("section")?.trim();
-    return ["workspace", "products", "rawMaterials", "production", "dashboard", "settings"].includes(section) ? section : "dashboard";
+    return ["workspace", "products", "rawMaterials", "production", "dashboard", "sales", "settings"].includes(section) ? section : "dashboard";
 }
 export function AdminPage() {
     const { user, loading } = useAuthSession();
