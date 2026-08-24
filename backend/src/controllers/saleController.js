@@ -38,19 +38,19 @@ export async function createSale(req, res) {
         await dbConnect();
         const productName = typeof req.body?.productName === "string" ? req.body.productName.trim() : "";
         const quantity = Number(req.body?.quantity);
+        const rate = Number(req.body?.rate);
         if (!productName) {
             return res.status(400).json({ message: "Product name is required" });
         }
         if (Number.isNaN(quantity) || quantity <= 0) {
             return res.status(400).json({ message: "Quantity must be a positive number" });
         }
+        if (Number.isNaN(rate) || rate <= 0) {
+            return res.status(400).json({ message: "Rate must be a positive number" });
+        }
         const items = await Item.find({ tableName: productName }).lean();
         if (items.length === 0) {
             return res.status(400).json({ message: "Invalid product" });
-        }
-        const rate = Number(items.reduce((sum, item) => sum + (item.amount ?? 0), 0).toFixed(2));
-        if (!Number.isFinite(rate) || rate <= 0) {
-            return res.status(400).json({ message: `Product "${productName}" has no valid rate` });
         }
         const amount = calculateAmount(quantity, rate);
         const sale = await Sale.create({
