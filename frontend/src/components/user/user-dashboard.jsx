@@ -23,9 +23,6 @@ const EMPTY_BATCH_DETAILS = {
 };
 const EMPTY_PACK_ROWS = [{ packSize: "", quantity: "" }];
 const USER_DRAFT_PREFIX = "himalayapaints:user-dashboard-draft:";
-function normalizeCode(value) {
-    return String(value ?? "").trim().toLowerCase();
-}
 export function UserDashboard({ initialItems, initialTableName, tableNames, email }) {
      const navigate = useNavigate();
      const [tableName, setTableName] = useState(initialTableName);
@@ -304,12 +301,7 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
             const updated = Number(data.updated ?? 0);
             const skipped = Number(data.skipped ?? 0);
             const failed = Number(data.failed ?? 0);
-            setRawMaterials((current) => {
-                const nextMaterials = Array.isArray(data.materials) ? data.materials : [];
-                const importedCodes = new Set(nextMaterials.map((material) => normalizeCode(material.code)));
-                const withoutDuplicates = current.filter((material) => !importedCodes.has(normalizeCode(material.code)));
-                return [...withoutDuplicates, ...nextMaterials];
-            });
+            await fetchRawMaterials();
             if (failed > 0) {
                 const errorList = Array.isArray(data.errors) ? data.errors : [];
                 const errorText = errorList.map((entry) => `Row ${entry.row}: ${(entry.errors || []).join(", ")}`).join("\n");

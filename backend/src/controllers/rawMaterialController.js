@@ -40,7 +40,7 @@ export async function getRawMaterials(req, res) {
         }
     }
     const total = await RawMaterial.countDocuments(filter);
-    const materials = await RawMaterial.find(filter).sort({ createdAt: 1 }).skip(offset).limit(limit).lean();
+    const materials = await RawMaterial.find(filter).sort({ createdAt: -1 }).skip(offset).limit(limit).lean();
     if (search || code) {
         const normalizedSearch = normalizeCode(code || search);
         materials.sort((left, right) => {
