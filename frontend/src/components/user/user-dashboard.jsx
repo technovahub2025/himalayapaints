@@ -998,23 +998,23 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
                   <tr>
                     <th className="px-4 py-3 font-semibold">Code</th>
                     <th className="px-4 py-3 font-semibold">Raw Material</th>
+                    <th className="px-4 py-3 font-semibold">Date</th>
                     <th className="px-4 py-3 font-semibold">Quantity</th>
-                    <th className="px-4 py-3 font-semibold">Rate</th>
-                    <th className="px-4 py-3 font-semibold">Amount</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rawMaterials.map((material) => {
                     const quantity = Number(material.quantity ?? 0);
-                    const rate = Number(material.rate ?? 0);
-                    const amount = Number((quantity * rate).toFixed(2));
+                    const dateValue = material.date ? new Date(material.date) : null;
+                    const displayDate = dateValue && !Number.isNaN(dateValue.getTime())
+                      ? dateValue.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" })
+                      : "—";
                     return (
                       <tr key={material.code} className="border-t border-slate-200">
                         <td className="px-4 py-3 text-sm font-semibold text-slate-950">{material.code || "-"}</td>
                         <td className="px-4 py-3 text-sm text-slate-700">{material.name || "-"}</td>
+                        <td className="px-4 py-3 text-sm text-slate-500">{displayDate}</td>
                         <td className="px-4 py-3 text-sm text-slate-700">{quantity.toLocaleString()} KG</td>
-                        <td className="px-4 py-3 text-sm text-slate-500">{rate.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-sm font-semibold text-slate-950">{amount.toLocaleString()}</td>
                       </tr>
                     );
                   })}
