@@ -39,7 +39,14 @@ export async function getPublicItems(req, res) {
     const items = await Item.find({ tableName }).sort({ createdAt: 1 }).lean();
     const tables = await Table.find().sort({ createdAt: 1 }).lean();
     const tableNames = Array.from(new Set([tableName, ...tables.map((table) => table.name).filter(Boolean)])).sort();
-    return res.json({ items, tables: tableNames });
+    const productStock = tables.map((table) => ({
+        name: table.name,
+        packSizes: Array.isArray(table.packSizes) ? table.packSizes.map((entry) => ({
+            packSize: entry.packSize,
+            availableQuantity: entry.availableQuantity
+        })) : []
+    }));
+    return res.json({ items, tables: tableNames, productStock });
 }
 export async function getAdminItems(req, res) {
     const auth = await getAuthFromRequest(req);
@@ -50,7 +57,14 @@ export async function getAdminItems(req, res) {
     const items = await Item.find({ tableName }).sort({ createdAt: 1 }).lean();
     const tables = await Table.find().sort({ createdAt: 1 }).lean();
     const tableNames = Array.from(new Set([tableName, ...tables.map((table) => table.name).filter(Boolean)])).sort();
-    return res.json({ items, tables: tableNames });
+    const productStock = tables.map((table) => ({
+        name: table.name,
+        packSizes: Array.isArray(table.packSizes) ? table.packSizes.map((entry) => ({
+            packSize: entry.packSize,
+            availableQuantity: entry.availableQuantity
+        })) : []
+    }));
+    return res.json({ items, tables: tableNames, productStock });
 }
 export async function createAdminItem(req, res) {
     const auth = await getAuthFromRequest(req);

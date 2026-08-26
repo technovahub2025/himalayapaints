@@ -27,7 +27,23 @@ export async function ensureSeedData() {
     const distinctItemTables = Array.from(new Set(existingItems.map((item) => item.tableName).filter(Boolean))).filter(Boolean);
     const tableNames = Array.from(new Set([DEFAULT_TABLE_NAME, ...distinctItemTables]));
     for (const name of tableNames) {
-        await Table.updateOne({ name }, { $set: { name } }, { upsert: true });
+        await Table.updateOne(
+            { name },
+            {
+                $setOnInsert: {
+                    name,
+                    packSizes: [
+                        { packSize: 25, availableQuantity: 0 },
+                        { packSize: 50, availableQuantity: 0 }
+                    ]
+                }
+            },
+            { upsert: true }
+        );
+        await Table.updateOne(
+            { name, $or: [{ "packSizes.0": { $exists: false } }, { packSizes: { $size: 0 } }] },
+            { $set: { packSizes: [{ packSize: 25, availableQuantity: 0 }, { packSize: 50, availableQuantity: 0 }] } }
+        );
     }
     await Item.updateMany({
         $or: [
