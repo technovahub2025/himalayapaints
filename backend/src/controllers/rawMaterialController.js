@@ -4,6 +4,7 @@ import RawMaterial from "../models/RawMaterial.js";
 import { dbConnect } from "../lib/db.js";
 import { getAuthFromRequest } from "../utils/request-auth.js";
 import { generateRawMaterialCode, normalizeRawMaterialCode } from "../lib/raw-materials.js";
+import { calculateAmount } from "../lib/calculations.js";
 function forbidden(res) {
     return res.status(403).json({ message: "Forbidden" });
 }
@@ -364,6 +365,295 @@ export async function importRawMaterials(req, res) {
             imported: imported.length,
             updated: updated.length,
             skipped: skippedRows.length,
+            failed: allErrors.length,
+            errors: allErrors,
+            materials: [...imported, ...updated]
+        });
+    } catch {
+        return res.status(500).json({ success: false, message: "Excel import failed" });
+    }
+}
+function parseDateValue(value) {
+    if (!value && value !== 0 && value !== "") {
+        return null;
+    }
+    const num = Number(value);
+    if (!Number.isNaN(num) && Number.isFinite(num) && num > 0) {
+        return new Date(Math.round((num - 25569) * 86400 * 1000));
+    }
+    const str = String(value).trim();
+    if (!str) {
+        return null;
+    }
+    const isoMatch = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (isoMatch) {
+        const date = new Date(Date.UTC(+isoMatch[1], +isoMatch[2] - 1, +isoMatch[3]));
+        if (!Number.isNaN(date.getTime())) {
+            return date;
+        }
+    }
+    const dmyMatch = str.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})$/);
+    if (dmyMatch) {
+        const d = +dmyMatch[1];
+        const m = +dmyMatch[2];
+        const y = +dmyMatch[3];
+        let day = d;
+        let month = m;
+        if (m > 12 && d <= 12) {
+            day = m;
+            month = d;
+        }
+        const date = new Date(Date.UTC(y, month - 1, day));
+        if (!Number.isNaN(date.getTime())) {
+            return date;
+        }
+    }
+    return null;
+}
+async function syncItemRatesForCode(code, name, rate) {
+    const normalizedCode = normalizeCode(code);
+    const items = await Item.find().lean();
+    for (const item of items) {
+        const itemCode = item.code?.trim() || generateRawMaterialCode(item.name);
+        if (normalizeCode(itemCode) !== normalizedCode) {
+            continue;
+        }
+        await Item.findByIdAndUpdate(item._id, {
+            code: itemCode,
+            rate,
+            amount: calculateAmount(item.quantity, rate)
+        });
+    }
+}
+export async function userImportRawMaterials(req, res) {
+    const auth = await getAuthFromRequest(req);
+    if (!auth || (auth.role !== "admin" && auth.role !== "user")) {
+        return forbidden(res);
+    }
+    try {
+        if (!req.file) {
+            return res.status(400).json({ success: false, message: "No file uploaded" });
+        }
+        const ext = getRowExtension(req.file.originalname);
+        if (!["xlsx", "xls", "csv"].includes(ext)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid file type. Only .xlsx, .xls, and .csv files are allowed."
+            });
+        }
+        const buffer = req.file.buffer;
+        if (!buffer || buffer.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "The uploaded file is empty."
+            });
+        }
+        await dbConnect();
+        let workbook;
+        try {
+            workbook = XLSX.read(buffer, { type: "buffer" });
+        } catch {
+            return res.status(400).json({
+                success: false,
+                message: "The uploaded file is corrupted or not a valid Excel/CSV file."
+            });
+        }
+        if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "The uploaded file does not contain any sheets."
+            });
+        }
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "", raw: false });
+        if (!rows || rows.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "No data rows found in the file."
+            });
+        }
+        const firstRow = rows[0] || {};
+        const nameKey = findHeaderKey(firstRow, ["name", "materialname", "rawmaterialname", "rawmaterial", "material"]);
+        const codeKey = findHeaderKey(firstRow, ["code", "rawmaterialcode"]);
+        const dateKey = findHeaderKey(firstRow, ["date"]);
+        const quantityKey = findHeaderKey(firstRow, ["quantity", "qty", "stock", "count"]);
+        const rateKey = findHeaderKey(firstRow, ["rate", "price", "cost"]);
+        if (!nameKey || !codeKey) {
+            return res.status(400).json({
+                success: false,
+                message: "The file must include 'Name' and 'Code' columns."
+            });
+        }
+        const existingMaterials = await RawMaterial.find().select("code name rate quantity _id").lean();
+        const existingMap = new Map();
+        for (const material of existingMaterials) {
+            existingMap.set(normalizeCode(material.code), material);
+        }
+        const validRows = [];
+        const errorRows = [];
+        const skippedRows = [];
+        const seenCodes = new Map();
+        for (let index = 0; index < rows.length; index += 1) {
+            const row = rows[index] || {};
+            const rowNumber = index + 2;
+            const errors = [];
+            const name = getCellText(nameKey ? row[nameKey] : "");
+            const code = getCellText(codeKey ? row[codeKey] : "");
+            const dateRaw = dateKey ? getCellText(row[dateKey]) : "";
+            const quantityRaw = quantityKey ? getCellText(row[quantityKey]) : "";
+            const rateRaw = rateKey ? getCellText(row[rateKey]) : "";
+            if (!name && !code && !dateRaw && !quantityRaw && !rateRaw) {
+                skippedRows.push({ row: rowNumber });
+                continue;
+            }
+            if (!name) {
+                errors.push("Missing Name");
+            }
+            if (!code) {
+                errors.push("Missing Code");
+            }
+            if (!dateRaw) {
+                errors.push("Missing Date");
+            }
+            if (!quantityRaw) {
+                errors.push("Missing Quantity");
+            }
+            let parsedDate = null;
+            if (dateRaw) {
+                parsedDate = parseDateValue(dateRaw);
+                if (!parsedDate) {
+                    errors.push(`Invalid Date "${dateRaw}"`);
+                }
+            }
+            let quantity = null;
+            if (quantityRaw) {
+                const quantityNum = Number(quantityRaw);
+                if (Number.isNaN(quantityNum) || !Number.isFinite(quantityNum) || quantityNum < 0) {
+                    errors.push(`Invalid Quantity "${quantityRaw}"`);
+                } else {
+                    quantity = quantityNum;
+                }
+            }
+            let rate = null;
+            if (rateRaw && rateKey) {
+                const rateNum = Number(rateRaw);
+                if (Number.isNaN(rateNum) || !Number.isFinite(rateNum) || rateNum < 0) {
+                    errors.push(`Invalid Rate "${rateRaw}"`);
+                } else {
+                    rate = rateNum;
+                }
+            }
+            const normalizedCode = code ? normalizeCode(code) : "";
+            if (normalizedCode) {
+                if (seenCodes.has(normalizedCode)) {
+                    errors.push(`Duplicate Code "${code}" (already used in row ${seenCodes.get(normalizedCode)})`);
+                } else {
+                    seenCodes.set(normalizedCode, rowNumber);
+                }
+            }
+            if (errors.length > 0) {
+                errorRows.push({
+                    row: rowNumber,
+                    code,
+                    name,
+                    errors
+                });
+            } else {
+                validRows.push({
+                    row: rowNumber,
+                    code,
+                    name,
+                    quantity,
+                    date: parsedDate,
+                    rate
+                });
+            }
+        }
+        if (validRows.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "No valid rows to import",
+                imported: 0,
+                updated: 0,
+                skipped: skippedRows.length + errorRows.length,
+                failed: errorRows.length,
+                errors: errorRows
+            });
+        }
+        const imported = [];
+        const updated = [];
+        const writeErrors = [];
+        for (const validRow of validRows) {
+            const normalizedCode = normalizeCode(validRow.code);
+            const existing = existingMap.get(normalizedCode);
+            try {
+                if (existing) {
+                    const updateData = {
+                        name: validRow.name,
+                        quantity: validRow.quantity,
+                        date: validRow.date
+                    };
+                    if (validRow.rate !== null) {
+                        updateData.rate = validRow.rate;
+                    }
+                    await RawMaterial.updateOne(
+                        { _id: existing._id },
+                        { $set: updateData }
+                    );
+                    existingMap.set(normalizedCode, {
+                        ...existing,
+                        ...updateData,
+                        _id: existing._id
+                    });
+                    if (validRow.rate !== null && validRow.rate !== existing.rate) {
+                        await syncItemRatesForCode(validRow.code, validRow.name, validRow.rate);
+                    }
+                    updated.push({
+                        code: validRow.code,
+                        name: validRow.name,
+                        quantity: validRow.quantity,
+                        date: validRow.date,
+                        rate: validRow.rate !== null ? validRow.rate : existing.rate
+                    });
+                } else {
+                    const createData = {
+                        code: validRow.code,
+                        name: validRow.name,
+                        quantity: validRow.quantity,
+                        date: validRow.date,
+                        rate: validRow.rate !== null ? validRow.rate : 0
+                    };
+                    const created = await RawMaterial.create(createData);
+                    imported.push({
+                        code: validRow.code,
+                        name: validRow.name,
+                        quantity: validRow.quantity,
+                        date: validRow.date,
+                        rate: createData.rate
+                    });
+                    existingMap.set(normalizedCode, created.toObject ? created.toObject() : created);
+                }
+            } catch (dbError) {
+                writeErrors.push({
+                    row: validRow.row,
+                    code: validRow.code,
+                    name: validRow.name,
+                    errors: [dbError.message || "Database error"]
+                });
+            }
+        }
+        const allErrors = [...errorRows, ...writeErrors];
+        const skipped = skippedRows.length + errorRows.length;
+        const message = allErrors.length > 0
+            ? "Excel import completed with errors"
+            : "Excel import completed";
+        return res.json({
+            success: true,
+            message,
+            imported: imported.length,
+            updated: updated.length,
+            skipped,
             failed: allErrors.length,
             errors: allErrors,
             materials: [...imported, ...updated]

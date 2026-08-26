@@ -10,6 +10,7 @@ import adminItemRoutes from "./routes/adminItemRoutes.js";
 import adminUserRoutes from "./routes/adminUserRoutes.js";
 import tableRoutes from "./routes/tableRoutes.js";
 import rawMaterialRoutes from "./routes/rawMaterialRoutes.js";
+import rawMaterialsUserRoutes from "./routes/rawMaterialsUserRoutes.js";
 import productionRoutes from "./routes/productionRoutes.js";
 import saleRoutes from "./routes/saleRoutes.js";
 import stockRoutes from "./routes/stockRoutes.js";
@@ -64,6 +65,7 @@ export function createApp() {
     app.use("/api/admin/users", adminUserRoutes);
     app.use("/api/admin/tables", tableRoutes);
     app.use("/api/admin/raw-materials", rawMaterialRoutes);
+    app.use("/api/raw-materials", rawMaterialsUserRoutes);
     app.use("/api/production", productionRoutes);
     app.use("/api/sales", saleRoutes);
     app.use("/api/stock", stockRoutes);

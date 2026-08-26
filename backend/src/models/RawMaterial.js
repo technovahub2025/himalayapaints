@@ -3,7 +3,8 @@ const RawMaterialSchema = new Schema({
     code: { type: String, required: true, unique: true, trim: true },
     name: { type: String, required: true, trim: true },
     rate: { type: Number, required: true, min: 0 },
-    quantity: { type: Number, default: 0, min: 0 }
+    quantity: { type: Number, default: 0, min: 0 },
+    date: { type: Date },
 }, { timestamps: true });
 const RawMaterial = mongoose.models.RawMaterial || mongoose.model("RawMaterial", RawMaterialSchema);
 export default RawMaterial;

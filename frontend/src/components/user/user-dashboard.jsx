@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FileSpreadsheet, FileText, LoaderCircle, Pencil, Printer, RefreshCw, Save, ChevronDown, Download } from "lucide-react";
+import { FileSpreadsheet, FileText, LoaderCircle, Pencil, Printer, RefreshCw, Save, ChevronDown, Download, Upload } from "lucide-react";
 import { calculateGrandTotal, safePercent, scaleQuantity } from "@/lib/calculations";
 import { Button, Badge, Card, CardBody, CardHeader, Input, Subtitle, Title } from "@/components/ui";
 import { SummaryCards } from "@/components/summary-cards";
@@ -23,6 +23,9 @@ const EMPTY_BATCH_DETAILS = {
 };
 const EMPTY_PACK_ROWS = [{ packSize: "", quantity: "" }];
 const USER_DRAFT_PREFIX = "himalayapaints:user-dashboard-draft:";
+function normalizeCode(value) {
+    return String(value ?? "").trim().toLowerCase();
+}
 export function UserDashboard({ initialItems, initialTableName, tableNames, email }) {
      const navigate = useNavigate();
      const [tableName, setTableName] = useState(initialTableName);
@@ -44,6 +47,8 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
     const [rawMaterials, setRawMaterials] = useState([]);
     const [rawMaterialsLoading, setRawMaterialsLoading] = useState(false);
     const [rawMaterialsError, setRawMaterialsError] = useState(null);
+    const [rawMaterialImportLoading, setRawMaterialImportLoading] = useState(false);
+    const rawMaterialImportInputRef = useRef(null);
      const restoringDraftRef = useRef(null);
      const batchNoLoadedRef = useRef(false);
      const [batchNoEditable, setBatchNoEditable] = useState(false);
@@ -138,19 +143,6 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
     useEffect(() => {
         if (detailsType !== "rawMaterial" || rawMaterials.length > 0) {
             return;
-        }
-        async function fetchRawMaterials() {
-            setRawMaterialsLoading(true);
-            setRawMaterialsError(null);
-            try {
-                const data = await apiFetch("/api/admin/raw-materials?limit=100");
-                setRawMaterials(Array.isArray(data.materials) ? data.materials : []);
-            } catch (error) {
-                setRawMaterialsError(error instanceof Error ? error.message : "Failed to load raw materials");
-                setRawMaterials([]);
-            } finally {
-                setRawMaterialsLoading(false);
-            }
         }
         void fetchRawMaterials();
     }, [detailsType, rawMaterials.length]);
@@ -256,6 +248,80 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
     }
     async function refreshItems() {
         await loadTable(tableName);
+    }
+    async function fetchRawMaterials() {
+        setRawMaterialsLoading(true);
+        setRawMaterialsError(null);
+        try {
+            const data = await apiFetch("/api/admin/raw-materials?limit=100");
+            setRawMaterials(Array.isArray(data.materials) ? data.materials : []);
+        } catch (error) {
+            setRawMaterialsError(error instanceof Error ? error.message : "Failed to load raw materials");
+            setRawMaterials([]);
+        } finally {
+            setRawMaterialsLoading(false);
+        }
+    }
+    function refreshRawMaterials() {
+        void fetchRawMaterials();
+    }
+    function openRawMaterialImport() {
+        rawMaterialImportInputRef.current?.click();
+    }
+    async function downloadRawMaterialTemplate() {
+        const XLSX = await import("xlsx-js-style");
+        const worksheetData = [
+            ["Name", "Code", "Date", "Quantity"],
+            ["WATER", "S634", "26-08-2026", "100"],
+            ["Sample Raw Material", "RM-001", "26-08-2026", "50"],
+            ["Acrylic Resin", "R-CARD", "26-08-2026", "25"]
+        ];
+        const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Template");
+        XLSX.writeFile(workbook, "raw-material-import-template.xlsx");
+    }
+    async function handleRawMaterialImportFileChange(event) {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (!file) {
+            return;
+        }
+        const ext = file.name.split(".").pop()?.toLowerCase();
+        if (!["xlsx", "xls", "csv"].includes(ext)) {
+            toast.error("Please select a valid Excel file (.xlsx, .xls).");
+            return;
+        }
+        setRawMaterialImportLoading(true);
+        try {
+            const formData = new FormData();
+            formData.append("file", file);
+            const data = await apiFetch("/api/raw-materials/import", {
+                method: "POST",
+                body: formData
+            });
+            const imported = Number(data.imported ?? 0);
+            const updated = Number(data.updated ?? 0);
+            const skipped = Number(data.skipped ?? 0);
+            const failed = Number(data.failed ?? 0);
+            setRawMaterials((current) => {
+                const nextMaterials = Array.isArray(data.materials) ? data.materials : [];
+                const importedCodes = new Set(nextMaterials.map((material) => normalizeCode(material.code)));
+                const withoutDuplicates = current.filter((material) => !importedCodes.has(normalizeCode(material.code)));
+                return [...withoutDuplicates, ...nextMaterials];
+            });
+            if (failed > 0) {
+                const errorList = Array.isArray(data.errors) ? data.errors : [];
+                const errorText = errorList.map((entry) => `Row ${entry.row}: ${(entry.errors || []).join(", ")}`).join("\n");
+                toast.error(`Import completed with errors.\nImported: ${imported}\nUpdated: ${updated}\nSkipped: ${skipped}\n\n${errorText}`);
+            } else {
+                toast.success(`Import completed.\nImported: ${imported}\nUpdated: ${updated}\nSkipped: ${skipped}`);
+            }
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Failed to import raw materials");
+        } finally {
+            setRawMaterialImportLoading(false);
+        }
     }
     const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
     const totalAmount = calculateGrandTotal(items);
@@ -889,7 +955,28 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
         <Card className="border-border bg-white shadow-sm rounded-2xl p-4 sm:p-6">
           <div className="mb-5 flex items-center justify-between pb-4 border-b border-border">
             <h3 className="text-[18px] font-semibold text-slate-900">Raw Material Details</h3>
-            {rawMaterials.length > 0 && <Badge>{rawMaterials.length.toLocaleString()} materials</Badge>}
+            <div className="flex items-center gap-2">
+              {rawMaterials.length > 0 && <Badge>{rawMaterials.length.toLocaleString()} materials</Badge>}
+              <Button variant="secondary" onClick={refreshRawMaterials} disabled={rawMaterialsLoading || rawMaterialImportLoading} className="h-8 px-3">
+                {rawMaterialsLoading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                Refresh
+              </Button>
+              <Button variant="secondary" onClick={downloadRawMaterialTemplate} className="h-8 px-3">
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Download Template
+              </Button>
+              <Button variant="primary" onClick={openRawMaterialImport} disabled={rawMaterialsLoading || rawMaterialImportLoading} className="h-8 px-3">
+                {rawMaterialImportLoading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                {rawMaterialImportLoading ? "Importing..." : "Import Excel"}
+              </Button>
+              <input
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                ref={rawMaterialImportInputRef}
+                onChange={handleRawMaterialImportFileChange}
+              />
+            </div>
           </div>
           {rawMaterialsLoading ? (
             <div className="flex items-center gap-3 text-sm text-muted">

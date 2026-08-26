@@ -13,6 +13,7 @@ const upload = multer({
         }
     }
 });
+export { upload };
 const router = Router();
 router.get("/", getRawMaterials);
 router.post("/import", upload.single("file"), importRawMaterials);
