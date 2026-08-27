@@ -23,7 +23,7 @@ function formatDate(value) {
         return "—";
     return d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
-export function SalesDashboard({ email }) {
+export function SalesDashboard({ email, role }) {
     const [products, setProducts] = useState([]);
     const [selectedProduct, setSelectedProduct] = useState("");
     const [packSizes, setPackSizes] = useState([]);
@@ -32,6 +32,8 @@ export function SalesDashboard({ email }) {
     const [stockError, setStockError] = useState(null);
     const [quantity, setQuantity] = useState("");
     const [ratePerKg, setRatePerKg] = useState(null);
+    const [tableRateDraft, setTableRateDraft] = useState("");
+    const [savingRate, setSavingRate] = useState(false);
     const [amount, setAmount] = useState(0);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -64,6 +66,7 @@ export function SalesDashboard({ email }) {
             setAvailableQuantity(null);
             setStockError(null);
             setRatePerKg(null);
+            setTableRateDraft("");
             return;
         }
         try {
@@ -72,6 +75,7 @@ export function SalesDashboard({ email }) {
             setPackSizes(sizes);
             setStockError(null);
             setRatePerKg(data.ratePerKg !== undefined ? Number(data.ratePerKg) : null);
+            setTableRateDraft(data.ratePerKg !== undefined ? String(data.ratePerKg) : "");
             if (sizes.length > 0) {
                 const firstSize = sizes[0].packSize;
                 setSelectedPackSize(firstSize);
@@ -128,6 +132,38 @@ export function SalesDashboard({ email }) {
             setAmount(0);
         }
     }, [quantity, ratePerKg, selectedProduct]);
+    async function saveTableRate() {
+        if (!selectedProduct) {
+            toast.error("Please select a product first");
+            return;
+        }
+        const rate = Number(tableRateDraft);
+        if (Number.isNaN(rate) || rate < 0) {
+            toast.error("Enter a valid rate per KG (must be 0 or greater)");
+            return;
+        }
+        setSavingRate(true);
+        try {
+            const response = await fetch("/api/admin/tables/rate", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ name: selectedProduct, ratePerKg: rate })
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.message || "Failed to save rate");
+            }
+            toast.success(`Rate per KG saved: ${formatCurrency(rate)}`);
+            await refreshStock();
+        }
+        catch (error) {
+            toast.error(error instanceof Error ? error.message : "Failed to save rate");
+        }
+        finally {
+            setSavingRate(false);
+        }
+    }
     async function saveSale() {
         const qty = Number(quantity);
         if (!selectedProduct) {
@@ -210,6 +246,7 @@ export function SalesDashboard({ email }) {
         setQuantity("");
         setSelectedProduct("");
         setRatePerKg(null);
+        setTableRateDraft("");
         setAmount(0);
         setPackSizes([]);
         setSelectedPackSize(null);
@@ -305,12 +342,38 @@ export function SalesDashboard({ email }) {
           </div>
           <div className="col-span-12 sm:col-span-6 xl:col-span-4">
             <label htmlFor="sale-rate" className="block text-[13px] font-medium text-slate-700 mb-2">Rate per KG</label>
-            <Input
-              id="sale-rate"
-              value={formatCurrency(ratePerKg)}
-              readOnly
-              className="h-11.5 rounded-xl border-border bg-accentSoft font-semibold text-accent"
-            />
+            {role === "admin" ? (
+              <>
+                <div className="flex items-end gap-2">
+                  <Input
+                    id="sale-rate"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={tableRateDraft}
+                    onChange={(e) => setTableRateDraft(e.target.value)}
+                    placeholder="0.00"
+                    disabled={!selectedProduct || savingRate}
+                    className="flex-1 h-11.5 rounded-xl border-border bg-white placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
+                  />
+                  <Button
+                    variant="secondary"
+                    onClick={saveTableRate}
+                    disabled={savingRate || !selectedProduct}
+                    className="h-11.5 px-3"
+                  >
+                    {savingRate ? <LoaderCircle className="h-4 w-4 animate-spin"/> : "Save"}
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <Input
+                id="sale-rate"
+                value={formatCurrency(ratePerKg)}
+                readOnly
+                className="h-11.5 rounded-xl border-border bg-accentSoft font-semibold text-accent"
+              />
+            )}
           </div>
           <div className="col-span-12 sm:col-span-6 xl:col-span-4">
             <label htmlFor="sale-pack-display" className="block text-[13px] font-medium text-slate-700 mb-2">Pack</label>

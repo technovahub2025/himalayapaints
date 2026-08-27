@@ -18,7 +18,8 @@ export function SalesPage() {
     if (!user) {
         return <LoadingScreen title="Redirecting" subtitle="Please sign in to continue."/>;
     }
-    return (<AppShell role={user.role} email={user.email}>
-      <SalesDashboard email={user.email}/>
+    return (
+      <AppShell role={user.role} email={user.email}>
+      <SalesDashboard email={user.email} role={user.role}/>
     </AppShell>);
 }
