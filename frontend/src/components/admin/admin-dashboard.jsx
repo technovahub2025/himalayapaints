@@ -447,6 +447,7 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
     const [rawMaterialImportLoading, setRawMaterialImportLoading] = useState(false);
     const [selectedMaterialCodes, setSelectedMaterialCodes] = useState([]);
     const [tableForm, setTableForm] = useState(EMPTY_TABLE_FORM);
+    const [tableRateDraft, setTableRateDraft] = useState("");
     const [materialForm, setMaterialForm] = useState(EMPTY_MATERIAL_FORM);
     const [materialRateDrafts, setMaterialRateDrafts] = useState({});
     const [editingMaterialCode, setEditingMaterialCode] = useState(null);
@@ -706,6 +707,22 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
     }
 
     useEffect(() => {
+        async function loadTableRate() {
+            if (!selectedTableName) {
+                setTableRateDraft("");
+                return;
+            }
+            try {
+                const data = await apiFetch(`/api/sales/stock?productName=${encodeURIComponent(selectedTableName)}`);
+                setTableRateDraft(String(data.ratePerKg ?? ""));
+            }
+            catch {
+                setTableRateDraft("");
+            }
+        }
+        void loadTableRate();
+    }, [selectedTableName]);
+    useEffect(() => {
         void loadAnalyticsData();
         // The parent already fetched the initial table/items payload. Fetch only
         // analytics data here; workspace refreshes fetch the complete payload.
@@ -867,6 +884,31 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
         }
         catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to delete table");
+        }
+        finally {
+            setSavingTable(false);
+        }
+    }
+    async function saveTableRate() {
+        const rate = Number(tableRateDraft);
+        if (!selectedTableName) {
+            toast.error("Select a table first.");
+            return;
+        }
+        if (Number.isNaN(rate) || rate < 0) {
+            toast.error("Enter a valid rate per KG.");
+            return;
+        }
+        setSavingTable(true);
+        try {
+            await apiFetch("/api/admin/tables/rate", {
+                method: "PATCH",
+                json: { name: selectedTableName, ratePerKg: rate }
+            });
+            toast.success(`Rate per KG updated to ${formatAmount(rate)}`);
+        }
+        catch (error) {
+            toast.error(error instanceof Error ? error.message : "Failed to update rate");
         }
         finally {
             setSavingTable(false);
@@ -1332,6 +1374,16 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                                 ))}
                             </Select>
                         </div>
+                    </div>
+                    <div className="flex flex-wrap items-end gap-4">
+                        <div className="flex-1 min-w-[180px]">
+                            <Label>Rate per KG (₹)</Label>
+                            <Input value={tableRateDraft} onChange={(event) => setTableRateDraft(event.target.value)} inputMode="decimal" placeholder="0.00" disabled={savingTable || !selectedTableName} />
+                        </div>
+                        <Button variant="secondary" onClick={saveTableRate} disabled={savingTable || !selectedTableName}>
+                            <Save className="mr-2 h-4 w-4" />
+                            Save Rate
+                        </Button>
                     </div>
                     <div className="flex flex-wrap gap-2 sm:gap-3">
                         <Button variant="secondary" onClick={createTable} disabled={savingTable}>

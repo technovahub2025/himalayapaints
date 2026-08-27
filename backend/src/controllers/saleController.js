@@ -49,6 +49,7 @@ export async function getSaleStock(req, res) {
         const packSizes = Array.isArray(table.packSizes) ? table.packSizes : [];
         return res.json({
             productName: table.name,
+            ratePerKg: Number(table.ratePerKg ?? 0),
             packSizes: packSizes.map((entry) => ({
                 packSize: entry.packSize,
                 availableQuantity: entry.availableQuantity
@@ -67,16 +68,12 @@ export async function createSale(req, res) {
         await dbConnect();
         const productName = typeof req.body?.productName === "string" ? req.body.productName.trim() : "";
         const quantity = Number(req.body?.quantity);
-        const rate = Number(req.body?.rate);
         const packSize = req.body?.packSize !== undefined && req.body?.packSize !== null ? Number(req.body?.packSize) : null;
         if (!productName) {
             return res.status(400).json({ message: "Product name is required" });
         }
         if (Number.isNaN(quantity) || quantity <= 0) {
             return res.status(400).json({ message: "Quantity must be a positive number" });
-        }
-        if (Number.isNaN(rate) || rate <= 0) {
-            return res.status(400).json({ message: "Rate must be a positive number" });
         }
         const items = await Item.find({ tableName: productName }).lean();
         if (items.length === 0) {
@@ -85,6 +82,10 @@ export async function createSale(req, res) {
         const table = await Table.findOne({ name: productName }).lean();
         if (!table) {
             return res.status(404).json({ message: "Product not found" });
+        }
+        const rate = Number(table.ratePerKg ?? 0);
+        if (rate <= 0) {
+            return res.status(400).json({ message: "Product rate has not been set by admin" });
         }
         const packSizes = Array.isArray(table.packSizes) ? table.packSizes : [];
         let selectedPackSize;

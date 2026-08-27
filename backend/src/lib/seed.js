@@ -32,6 +32,7 @@ export async function ensureSeedData() {
             {
                 $setOnInsert: {
                     name,
+                    ratePerKg: 0,
                     packSizes: [
                         { packSize: 25, availableQuantity: 0 },
                         { packSize: 50, availableQuantity: 0 }

@@ -31,7 +31,7 @@ export function SalesDashboard({ email }) {
     const [availableQuantity, setAvailableQuantity] = useState(null);
     const [stockError, setStockError] = useState(null);
     const [quantity, setQuantity] = useState("");
-    const [rate, setRate] = useState(0);
+    const [ratePerKg, setRatePerKg] = useState(null);
     const [amount, setAmount] = useState(0);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -57,38 +57,13 @@ export function SalesDashboard({ email }) {
         }
         loadProducts();
     }, []);
-    useEffect(() => {
-        async function loadRate() {
-            if (!selectedProduct) {
-                setRate(0);
-                return;
-            }
-            setLoading(true);
-            try {
-                const response = await fetch(`/api/items?tableName=${encodeURIComponent(selectedProduct)}`);
-                const data = await response.json();
-                if (!response.ok) {
-                    throw new Error(data.message || "Failed to load product rate");
-                }
-                const items = data.items ?? [];
-                const computedRate = Number(items.reduce((sum, item) => sum + (item.amount ?? 0), 0).toFixed(2));
-                setRate(computedRate);
-            }
-            catch (error) {
-                toast.error(error instanceof Error ? error.message : "Failed to load product rate");
-            }
-            finally {
-                setLoading(false);
-            }
-        }
-        loadRate();
-    }, [selectedProduct]);
     async function loadStock() {
         if (!selectedProduct) {
             setPackSizes([]);
             setSelectedPackSize(null);
             setAvailableQuantity(null);
             setStockError(null);
+            setRatePerKg(null);
             return;
         }
         try {
@@ -96,6 +71,7 @@ export function SalesDashboard({ email }) {
             const sizes = Array.isArray(data.packSizes) ? data.packSizes : [];
             setPackSizes(sizes);
             setStockError(null);
+            setRatePerKg(data.ratePerKg !== undefined ? Number(data.ratePerKg) : null);
             if (sizes.length > 0) {
                 const firstSize = sizes[0].packSize;
                 setSelectedPackSize(firstSize);
@@ -111,6 +87,7 @@ export function SalesDashboard({ email }) {
             setSelectedPackSize(null);
             setAvailableQuantity(null);
             setStockError(error instanceof Error ? error.message : "Unable to load inventory. Please try again.");
+            setRatePerKg(null);
         }
     }
     useEffect(() => {
@@ -144,13 +121,13 @@ export function SalesDashboard({ email }) {
     }, [selectedProduct]);
     useEffect(() => {
         const qty = Number(quantity);
-        if (selectedProduct && rate > 0 && !Number.isNaN(qty) && qty > 0) {
-            setAmount(calculateAmount(qty, rate));
+        if (selectedProduct && ratePerKg !== null && ratePerKg > 0 && !Number.isNaN(qty) && qty > 0) {
+            setAmount(calculateAmount(qty, ratePerKg));
         }
         else {
             setAmount(0);
         }
-    }, [quantity, rate, selectedProduct]);
+    }, [quantity, ratePerKg, selectedProduct]);
     async function saveSale() {
         const qty = Number(quantity);
         if (!selectedProduct) {
@@ -173,6 +150,10 @@ export function SalesDashboard({ email }) {
             toast.error(`Insufficient available quantity. Only ${availableQuantity} KG is available.`);
             return;
         }
+        if (ratePerKg === null || ratePerKg === 0) {
+            toast.error("Product rate has not been set by admin.");
+            return;
+        }
         setSaving(true);
         try {
             const response = await fetch("/api/sales", {
@@ -182,7 +163,6 @@ export function SalesDashboard({ email }) {
                 body: JSON.stringify({
                     productName: selectedProduct,
                     quantity: qty,
-                    rate,
                     packSize: selectedPackSize
                 })
             });
@@ -229,7 +209,7 @@ export function SalesDashboard({ email }) {
     function clearForm() {
         setQuantity("");
         setSelectedProduct("");
-        setRate(0);
+        setRatePerKg(null);
         setAmount(0);
         setPackSizes([]);
         setSelectedPackSize(null);
@@ -257,7 +237,7 @@ export function SalesDashboard({ email }) {
             { label: "Selected Product", value: selectedProduct || "—", hint: "Product for this sale" },
             { label: "Pack Size", value: selectedPackSize !== null && selectedPackSize !== undefined ? `${selectedPackSize} KG` : "—", hint: "Selected pack size" },
             { label: "Available Quantity", value: availableQuantity !== null && availableQuantity !== undefined ? `${availableQuantity} KG` : "—", hint: "Stock on hand" },
-            { label: "Rate per KG", value: formatCurrency(rate), hint: "Auto-filled from product data" },
+            { label: "Rate per KG", value: formatCurrency(ratePerKg), hint: "Set by admin (read-only)" },
             { label: "Quantity (KG)", value: quantity ? `${Number(quantity).toLocaleString("en-IN")} KG` : "—", hint: "Quantity entered" },
             { label: "Total Amount", value: formatCurrency(amount), hint: "Quantity × Rate" }
         ]}/>
@@ -327,13 +307,9 @@ export function SalesDashboard({ email }) {
             <label htmlFor="sale-rate" className="block text-[13px] font-medium text-slate-700 mb-2">Rate per KG</label>
             <Input
               id="sale-rate"
-              type="number"
-              min="0"
-              step="0.01"
-              value={rate === 0 ? "" : rate}
-              onChange={(e) => setRate(Number(e.target.value) || 0)}
-              placeholder="0.00"
-              className="h-11.5 rounded-xl border-border bg-white placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none"
+              value={formatCurrency(ratePerKg)}
+              readOnly
+              className="h-11.5 rounded-xl border-border bg-accentSoft font-semibold text-accent"
             />
           </div>
           <div className="col-span-12 sm:col-span-6 xl:col-span-4">

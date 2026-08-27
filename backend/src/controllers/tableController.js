@@ -15,6 +15,7 @@ async function getTableSummaries() {
     const countMap = new Map(counts.map((entry) => [entry._id, entry.count]));
     return tables.map((table) => ({
         name: table.name,
+        ratePerKg: Number(table.ratePerKg ?? 0),
         count: countMap.get(table.name) ?? 0
     }));
 }
@@ -117,5 +118,31 @@ export async function deleteTable(req, res) {
     }
     catch {
         return res.status(500).json({ message: "Failed to delete table" });
+    }
+}
+export async function updateTableRate(req, res) {
+    const auth = await getAuthFromRequest(req);
+    if (!auth || auth.role !== "admin")
+        return forbidden(res);
+    try {
+        const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+        const ratePerKg = Number(req.body?.ratePerKg);
+        if (!name) {
+            return res.status(400).json({ message: "Table name is required" });
+        }
+        if (Number.isNaN(ratePerKg) || ratePerKg < 0) {
+            return res.status(400).json({ message: "Rate per KG must be a valid number" });
+        }
+        await dbConnect();
+        const table = await Table.findOne({ name });
+        if (!table) {
+            return res.status(404).json({ message: "Table not found" });
+        }
+        table.ratePerKg = ratePerKg;
+        await table.save();
+        return res.json({ table: { name: table.name, ratePerKg: table.ratePerKg } });
+    }
+    catch {
+        return res.status(500).json({ message: "Failed to update table rate" });
     }
 }
