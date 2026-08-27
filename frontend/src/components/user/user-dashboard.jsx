@@ -754,6 +754,173 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
         };
         document.body.appendChild(iframe);
     }
+    function formatRawMaterialDate(value) {
+        if (!value)
+            return "—";
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime()))
+            return "—";
+        return d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
+    }
+    const rawMaterialExportRows = rawMaterials.map((material) => {
+        const quantity = Number(material.quantity ?? 0);
+        return {
+            code: material.code || "",
+            name: material.name || "",
+            date: formatRawMaterialDate(material.date),
+            quantity: `${quantity.toLocaleString()} KG`
+        };
+    });
+    async function exportRawMaterialExcel() {
+        if (rawMaterials.length === 0) {
+            toast.error("No raw materials to export");
+            return;
+        }
+        const XLSX = await import("xlsx-js-style");
+        const worksheetData = [
+            ["RAW MATERIAL DETAILS"],
+            [],
+            ["Code", "Raw Material", "Date", "Quantity"],
+            ...rawMaterials.map((material) => {
+                const quantity = Number(material.quantity ?? 0);
+                return [
+                    material.code || "",
+                    material.name || "",
+                    formatRawMaterialDate(material.date),
+                    `${quantity.toLocaleString()} KG`
+                ];
+            })
+        ];
+        const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+        const border = {
+            top: { style: "thin", color: { rgb: "000000" } },
+            bottom: { style: "thin", color: { rgb: "000000" } },
+            left: { style: "thin", color: { rgb: "000000" } },
+            right: { style: "thin", color: { rgb: "000000" } }
+        };
+        const titleFill = { patternType: "solid", fgColor: { rgb: "F3F4F6" } };
+        const headerFill = { patternType: "solid", fgColor: { rgb: "E5E7EB" } };
+        const boldFont = { bold: true, color: { rgb: "000000" } };
+        const regularFont = { color: { rgb: "000000" } };
+        function ensureCell(row, col) {
+            const address = XLSX.utils.encode_cell({ r: row, c: col });
+            if (!worksheet[address]) {
+                worksheet[address] = { t: "s", v: "" };
+            }
+            return worksheet[address];
+        }
+        function styleRange(startRow, endRow, startCol, endCol, style) {
+            for (let row = startRow; row <= endRow; row += 1) {
+                for (let col = startCol; col <= endCol; col += 1) {
+                    const cell = ensureCell(row, col);
+                    cell.s = { ...(cell.s ?? {}), ...style };
+                }
+            }
+        }
+        styleRange(0, 0, 0, 3, { font: { ...boldFont, sz: 14 }, alignment: { horizontal: "left", vertical: "center" }, fill: titleFill, border });
+        styleRange(2, 2, 0, 3, { fill: headerFill, font: boldFont, alignment: { horizontal: "center", vertical: "center" }, border });
+        const dataStartRow = 3;
+        const dataEndRow = dataStartRow + rawMaterials.length - 1;
+        styleRange(dataStartRow, dataEndRow, 0, 3, { font: regularFont, alignment: { horizontal: "left", vertical: "center" }, border });
+        styleRange(dataStartRow, dataEndRow, 2, 2, { alignment: { horizontal: "center", vertical: "center" } });
+        styleRange(dataStartRow, dataEndRow, 3, 3, { alignment: { horizontal: "right", vertical: "center" } });
+        worksheet["!cols"] = [
+            { wch: 16 },
+            { wch: 32 },
+            { wch: 16 },
+            { wch: 16 }
+        ];
+        worksheet["!rows"] = worksheetData.map(() => ({ hpt: 20 }));
+        worksheet["!rows"][0] = { hpt: 24 };
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Raw Materials");
+        XLSX.writeFile(workbook, `${tableName || "table"}-raw-materials.xlsx`);
+    }
+    async function createRawMaterialPdfDocument() {
+        const { jsPDF } = await import("jspdf");
+        const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+        const pageWidth = 297;
+        const marginX = 5;
+        const gridWidth = pageWidth - marginX * 2;
+        const colWidths = [20, 80, 30, 30];
+        const xPositions = [
+            marginX,
+            marginX + colWidths[0],
+            marginX + colWidths[0] + colWidths[1],
+            marginX + colWidths[0] + colWidths[1] + colWidths[2]
+        ];
+        const drawCell = (x, y, w, h, text = "", opts) => {
+            const { align = "left", bold = false, fillColor = null, fontSize = 8 } = opts ?? {};
+            doc.setDrawColor(0, 0, 0);
+            doc.setLineWidth(0.2);
+            if (fillColor) {
+                doc.setFillColor(fillColor[0], fillColor[1], fillColor[2]);
+                doc.rect(x, y, w, h, "FD");
+            }
+            else {
+                doc.rect(x, y, w, h);
+            }
+            doc.setFont("helvetica", bold ? "bold" : "normal");
+            doc.setFontSize(fontSize);
+            doc.setTextColor(0, 0, 0);
+            const textY = y + h / 2 + fontSize / 3.4;
+            const textX = align === "center" ? x + w / 2 : align === "right" ? x + w - 2 : x + 2;
+            doc.text(String(text ?? ""), textX, textY, { align, maxWidth: w - 4 });
+        };
+        let y = 6;
+        drawCell(marginX, y, gridWidth, 7, "RAW MATERIAL DETAILS", { align: "center", bold: true, fontSize: 10 });
+        y += 7;
+        drawCell(xPositions[0], y, colWidths[0], 7, "Code", { bold: true, fillColor: [229, 231, 235] });
+        drawCell(xPositions[1], y, colWidths[1], 7, "Raw Material", { bold: true, fillColor: [229, 231, 235] });
+        drawCell(xPositions[2], y, colWidths[2], 7, "Date", { bold: true, fillColor: [229, 231, 235], align: "center" });
+        drawCell(xPositions[3], y, colWidths[3], 7, "Quantity", { bold: true, fillColor: [229, 231, 235], align: "center" });
+        y += 7;
+        const rowHeight = 6.5;
+        for (let i = 0; i < rawMaterials.length; i += 1) {
+            const material = rawMaterials[i];
+            const quantity = Number(material.quantity ?? 0);
+            drawCell(xPositions[0], y, colWidths[0], rowHeight, material.code || "");
+            drawCell(xPositions[1], y, colWidths[1], rowHeight, material.name || "");
+            drawCell(xPositions[2], y, colWidths[2], rowHeight, formatRawMaterialDate(material.date), { align: "center" });
+            drawCell(xPositions[3], y, colWidths[3], rowHeight, `${quantity.toLocaleString()} KG`, { align: "center" });
+            y += rowHeight;
+        }
+        return doc;
+    }
+    async function exportRawMaterialPdf() {
+        if (rawMaterials.length === 0) {
+            toast.error("No raw materials to export");
+            return;
+        }
+        const doc = await createRawMaterialPdfDocument();
+        doc.save(`${tableName || "table"}-raw-materials.pdf`);
+    }
+    async function handleRawMaterialPrint() {
+        if (rawMaterials.length === 0) {
+            toast.error("No raw materials to print");
+            return;
+        }
+        const doc = await createRawMaterialPdfDocument();
+        doc.autoPrint();
+        const blobUrl = URL.createObjectURL(doc.output("blob"));
+        const iframe = document.createElement("iframe");
+        iframe.style.position = "fixed";
+        iframe.style.right = "0";
+        iframe.style.bottom = "0";
+        iframe.style.width = "0";
+        iframe.style.height = "0";
+        iframe.style.border = "0";
+        iframe.src = blobUrl;
+        iframe.onload = () => {
+            iframe.contentWindow?.focus();
+            iframe.contentWindow?.print();
+            window.setTimeout(() => {
+                URL.revokeObjectURL(blobUrl);
+                iframe.remove();
+            }, 1000);
+        };
+        document.body.appendChild(iframe);
+    }
     return (<div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-2xl">
@@ -808,27 +975,39 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
                  </Button>
                  <div className="absolute left-0 top-full mt-1 text-xs text-muted whitespace-nowrap">Excel, PDF, Print</div>
                   {exportOpen ? (<div className="absolute left-0 top-full z-20 mt-2 w-48 overflow-hidden rounded-2xl border border-line bg-white p-2 shadow-xl">
-                     <button type="button" className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm text-ink transition hover:bg-slate-50" onClick={async () => {
-                       setExportOpen(false);
-                       await exportExcel();
-                     }}>
-                       <FileSpreadsheet className="mr-2 h-4 w-4"/>
-                       Export Excel
-                     </button>
-                     <button type="button" className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm text-ink transition hover:bg-slate-50" onClick={async () => {
-                       setExportOpen(false);
-                       await exportPdf();
-                     }}>
-                       <FileText className="mr-2 h-4 w-4"/>
-                       Export PDF
-                     </button>
-                     <button type="button" className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm text-ink transition hover:bg-slate-50" onClick={() => {
-                       setExportOpen(false);
-                       handlePrint();
-                     }}>
-                       <Printer className="mr-2 h-4 w-4"/>
-                       Print
-                     </button>
+                      <button type="button" className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm text-ink transition hover:bg-slate-50" onClick={async () => {
+                        setExportOpen(false);
+                        if (detailsType === "rawMaterial") {
+                            await exportRawMaterialExcel();
+                        } else {
+                            await exportExcel();
+                        }
+                      }}>
+                        <FileSpreadsheet className="mr-2 h-4 w-4"/>
+                        Export Excel
+                      </button>
+                      <button type="button" className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm text-ink transition hover:bg-slate-50" onClick={async () => {
+                        setExportOpen(false);
+                        if (detailsType === "rawMaterial") {
+                            await exportRawMaterialPdf();
+                        } else {
+                            await exportPdf();
+                        }
+                      }}>
+                        <FileText className="mr-2 h-4 w-4"/>
+                        Export PDF
+                      </button>
+                      <button type="button" className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm text-ink transition hover:bg-slate-50" onClick={() => {
+                        setExportOpen(false);
+                        if (detailsType === "rawMaterial") {
+                            handleRawMaterialPrint();
+                        } else {
+                            handlePrint();
+                        }
+                      }}>
+                        <Printer className="mr-2 h-4 w-4"/>
+                        Print
+                      </button>
                    </div>) : null}
                </div>
               <Button variant="secondary" onClick={clearCurrentDraft} className="w-full sm:w-auto">
