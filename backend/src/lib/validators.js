@@ -1,4 +1,4 @@
-import { z } from "zod";
+﻿import { z } from "zod";
 export const loginSchema = z.object({
     email: z.string().email(),
     password: z.string().min(6)
@@ -43,6 +43,18 @@ export const productionLineSchema = z.object({
     actualQty: z.number().nonnegative().optional(),
     remarks: z.string().trim().optional(),
     signature: z.string().trim().optional()
+}).superRefine((line, ctx) => {
+    if (
+        line.actualQty !== undefined &&
+        line.actualQty < line.stdQty &&
+        !String(line.remarks ?? "").trim()
+    ) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Remarks are required when Actual Qty is less than Standard Qty",
+            path: ["remarks"]
+        });
+    }
 });
 export const productionPackRowSchema = z.object({
     packSize: z.string().trim().optional(),
@@ -60,3 +72,5 @@ export const productionBatchSchema = z.object({
     packRows: z.array(productionPackRowSchema).optional(),
     lines: z.array(productionLineSchema).min(1, "At least one line item is required")
 });
+
+

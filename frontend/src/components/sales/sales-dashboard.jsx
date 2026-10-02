@@ -276,7 +276,8 @@ export function SalesDashboard({ email, role }) {
             { label: "Available Quantity", value: availableQuantity !== null && availableQuantity !== undefined ? `${availableQuantity} KG` : "—", hint: "Stock on hand" },
             { label: "Rate per KG", value: formatCurrency(ratePerKg), hint: "Set by admin (read-only)" },
             { label: "Quantity (KG)", value: quantity ? `${Number(quantity).toLocaleString("en-IN")} KG` : "—", hint: "Quantity entered" },
-            { label: "Total Amount", value: formatCurrency(amount), hint: "Quantity × Rate" }
+            { label: "Total Amount", value: formatCurrency(amount), hint: "Quantity × Rate" },
+            { label: "Available Packs", value: selectedPackSize !== null && selectedPackSize !== undefined && Number(selectedPackSize) > 0 && availableQuantity !== null && availableQuantity !== undefined ? `${Math.floor(Number(availableQuantity) / Number(selectedPackSize)).toLocaleString("en-IN")} Packs` : "—", hint: "Full packs available" }
         ]}/>
       <Card className="border-border bg-white shadow-sm rounded-2xl p-4 sm:p-6">
         <div className="mb-5 pb-4 border-b border-border">

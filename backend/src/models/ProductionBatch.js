@@ -1,4 +1,4 @@
-import mongoose, { Schema } from "mongoose";
+﻿import mongoose, { Schema } from "mongoose";
 const ProductionLineSchema = new Schema({
     itemId: { type: String, trim: true, default: "" },
     materialName: { type: String, required: true, trim: true },
@@ -10,7 +10,8 @@ const ProductionLineSchema = new Schema({
 }, { _id: false });
 const ProductionPackRowSchema = new Schema({
     packSize: { type: String, trim: true, default: "" },
-    quantity: { type: String, trim: true, default: "" }
+    quantity: { type: String, trim: true, default: "" },
+    unit: { type: String, enum: ["litre", "kg"], default: "litre" }
 }, { _id: false });
 const ProductionBatchSchema = new Schema({
     productName: { type: String, required: true, trim: true, index: true },
@@ -27,3 +28,5 @@ const ProductionBatchSchema = new Schema({
 ProductionBatchSchema.index({ productName: 1, createdAt: 1 });
 const ProductionBatch = mongoose.models.ProductionBatch || mongoose.model("ProductionBatch", ProductionBatchSchema);
 export default ProductionBatch;
+
+

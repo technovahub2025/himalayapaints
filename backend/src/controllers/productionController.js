@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+﻿import mongoose from "mongoose";
 import { dbConnect } from "../lib/db.js";
 import { getAuthFromRequest } from "../utils/request-auth.js";
 import { getProductNameVariants } from "../lib/product-label.js";
@@ -92,7 +92,8 @@ export async function createProductionBatch(req, res) {
                 packRows: Array.isArray(parsed.data.packRows)
                     ? parsed.data.packRows.map((row) => ({
                         packSize: row.packSize || "",
-                        quantity: row.quantity || ""
+                        quantity: row.quantity || "",
+                      unit: row.unit === "kg" ? "kg" : "litre"
                     }))
                     : [],
                 lines: parsed.data.lines.map((line) => ({
@@ -147,3 +148,4 @@ export async function createProductionBatch(req, res) {
         await session.endSession();
     }
 }
+

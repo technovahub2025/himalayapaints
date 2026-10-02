@@ -1,4 +1,4 @@
-import { z } from "zod";
+﻿import { z } from "zod";
 export const loginSchema = z.object({
     email: z.string().email(),
     password: z.string().min(6)
@@ -35,6 +35,12 @@ export const productionLineSchema = z.object({
     remarks: z.string().trim().optional(),
     signature: z.string().trim().optional()
 });
+export const productionPackRowSchema = z.object({
+    packSize: z.string().trim().optional(),
+    quantity: z.string().trim().optional(),
+    unit: z.enum(["litre", "kg"]).default("litre")
+});
+
 export const productionBatchSchema = z.object({
     productName: z.string().trim().min(1, "Product name is required"),
     batchNo: z.string().trim().optional(),
@@ -44,5 +50,10 @@ export const productionBatchSchema = z.object({
     targetKg: z.number().nonnegative(),
     actualKg: z.number().nonnegative().optional(),
     createdBy: z.string().trim().optional(),
+    packRows: z.array(productionPackRowSchema).optional(),
     lines: z.array(productionLineSchema).min(1, "At least one line item is required")
 });
+
+
+
+

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { Input } from "@/components/ui";
 import { safePercent, scaleQuantity } from "@/lib/calculations";
 export function RawMaterialTable({ actuals, distributedTotal, items, manualKgValues, remarks, signatures, targetKg, onActualChange, onManualKgChange, onRemarkChange, onSignatureChange, onTargetKgChange }) {
@@ -23,6 +23,10 @@ export function RawMaterialTable({ actuals, distributedTotal, items, manualKgVal
           const actualValue = actuals[item._id] ?? "";
           const remarkValue = remarks[item._id] ?? "";
           const signatureValue = signatures[item._id] ?? "";
+          const standardQty = Number(kgValue || 0);
+          const hasActualQty = String(actualValue ?? "").trim() !== "";
+          const isShortfall = hasActualQty && Number(actualValue) < standardQty;
+          const requiresRemarks = isShortfall && !String(remarkValue ?? "").trim();
           return (
             <div key={item._id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
@@ -40,15 +44,15 @@ export function RawMaterialTable({ actuals, distributedTotal, items, manualKgVal
                 </div>
                 <div>
                   <label className="mb-2 block text-xs font-medium text-slate-700">Actual Qty</label>
-                  <Input type="number" min="0" step="0.01" value={actualValue} onChange={(e) => onActualChange(item._id, e.target.value)} placeholder="Enter actuals" className="h-11 w-full rounded-xl border-[#E5E7EB] bg-white px-3 text-sm placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"/>
+                  <Input type="number" min="0" step="0.01" value={actualValue} onChange={(e) => onActualChange(item._id, e.target.value)} placeholder="Enter actuals" className="h-11 w-full rounded-xl border-[#E5E7EB] bg-white px-3 text-sm placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"/>{isShortfall && <span className="mt-1 block text-xs text-red-500">* Low Stock - Actual Qty is below Standard Qty</span>}
                 </div>
                 <div>
-                  <label className="mb-2 block text-xs font-medium text-slate-700">Remarks</label>
-                  <Input value={remarkValue} onChange={(e) => onRemarkChange(item._id, e.target.value)} placeholder="Enter remarks" className="h-11 w-full rounded-xl border-[#E5E7EB] bg-white px-3 text-sm placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"/>
+                  <label className="mb-2 block text-xs font-medium text-slate-700">Remarks {isShortfall && <span className="text-red-500">*</span>}</label>
+                  <div className="flex flex-col gap-1"><Input value={remarkValue} onChange={(e) => onRemarkChange(item._id, e.target.value)} placeholder={isShortfall ? "Remarks required" : "Enter remarks"} className="h-11 w-full rounded-xl border-[#E5E7EB] bg-white px-3 text-sm placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"/>{isShortfall && <span className="text-xs text-red-500">* Required before signing</span>}</div>
                 </div>
                 <div>
                   <label className="mb-2 block text-xs font-medium text-slate-700">Signature</label>
-                  <Input value={signatureValue} onChange={(e) => onSignatureChange(item._id, e.target.value)} placeholder="Enter signature" className="h-11 w-full rounded-xl border-[#E5E7EB] bg-white px-3 text-sm placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"/>
+                  <Input value={signatureValue} onChange={(e) => onSignatureChange(item._id, e.target.value)} placeholder="Enter signature" disabled={requiresRemarks} className="h-11 w-full rounded-xl border-[#E5E7EB] bg-white px-3 text-sm placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"/>
                 </div>
               </div>
             </div>
@@ -75,6 +79,10 @@ export function RawMaterialTable({ actuals, distributedTotal, items, manualKgVal
             const actualValue = actuals[item._id] ?? "";
             const remarkValue = remarks[item._id] ?? "";
             const signatureValue = signatures[item._id] ?? "";
+          const standardQty = Number(kgValue || 0);
+          const hasActualQty = String(actualValue ?? "").trim() !== "";
+          const isShortfall = hasActualQty && Number(actualValue) < standardQty;
+          const requiresRemarks = isShortfall && !String(remarkValue ?? "").trim();
             return (<tr key={item._id} className="transition-colors duration-150 hover:bg-slate-50/50">
                       <td className="px-4 py-4 align-middle sm:px-6 sm:py-6">
                         <span className="inline-flex items-center justify-center rounded-full bg-slate-50 px-3 py-1.5 text-[13px] font-medium text-slate-700">{percentage.toFixed(2)}%</span>
@@ -89,13 +97,13 @@ export function RawMaterialTable({ actuals, distributedTotal, items, manualKgVal
                         </div>
                       </td>
                       <td className="px-4 py-4 align-middle sm:px-6 sm:py-6">
-                        <Input type="number" min="0" step="0.01" value={actualValue} onChange={(e) => onActualChange(item._id, e.target.value)} placeholder="Enter actuals" className="h-11 w-full rounded-xl border-[#E5E7EB] bg-white px-3 text-sm placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"/>
+                        <Input type="number" min="0" step="0.01" value={actualValue} onChange={(e) => onActualChange(item._id, e.target.value)} placeholder="Enter actuals" className="h-11 w-full rounded-xl border-[#E5E7EB] bg-white px-3 text-sm placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"/>{isShortfall && <span className="mt-1 block text-xs text-red-500">* Low Stock - Actual Qty is below Standard Qty</span>}
                       </td>
                       <td className="px-4 py-4 align-middle sm:px-6 sm:py-6">
-                        <Input value={remarkValue} onChange={(e) => onRemarkChange(item._id, e.target.value)} placeholder="Enter remarks" className="h-11 w-full rounded-xl border-[#E5E7EB] bg-white px-3 text-sm placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"/>
+                        <div className="flex flex-col gap-1"><Input value={remarkValue} onChange={(e) => onRemarkChange(item._id, e.target.value)} placeholder={isShortfall ? "Remarks required" : "Enter remarks"} className="h-11 w-full rounded-xl border-[#E5E7EB] bg-white px-3 text-sm placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"/>{isShortfall && <span className="text-xs text-red-500">* Required before signing</span>}</div>
                       </td>
                       <td className="px-4 py-4 align-middle sm:px-6 sm:py-6">
-                        <Input value={signatureValue} onChange={(e) => onSignatureChange(item._id, e.target.value)} placeholder="Enter signature" className="h-11 w-full rounded-xl border-[#E5E7EB] bg-white px-3 text-sm placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"/>
+                        <Input value={signatureValue} onChange={(e) => onSignatureChange(item._id, e.target.value)} placeholder="Enter signature" disabled={requiresRemarks} className="h-11 w-full rounded-xl border-[#E5E7EB] bg-white px-3 text-sm placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-accent focus:ring-2 focus:ring-accent/20 focus:outline-none"/>
                       </td>
                     </tr>);
         })}
@@ -114,3 +122,7 @@ export function RawMaterialTable({ actuals, distributedTotal, items, manualKgVal
       </div>
     </div>);
 }
+
+
+
+

@@ -9,7 +9,13 @@ import { formatProductLabel } from "@/lib/product-label";
 import { useAuthSessionContext } from "@/components/providers";
 
 const EMPTY_TABLE_FORM = { name: "", duplicateFrom: "" };
-const EMPTY_MATERIAL_FORM = { code: "", name: "", rate: "", quantity: "" };
+const EMPTY_MATERIAL_FORM = {
+    code: "",
+    name: "",
+    rate: "",
+    quantity: "",
+    date: new Date().toISOString().split("T")[0],
+};
 const NUMBER_FORMAT = new Intl.NumberFormat("en-US", {
     maximumFractionDigits: 2
 });
@@ -422,9 +428,40 @@ function createItemDraft(item) {
         quantity: String(item?.quantity ?? "")
     };
 }
+function formatRawMaterialDate(value) {
+    if (!value) {
+        return "—";
+    }
 
-function formatDateTime(value) {
-    return value ? new Date(value).toLocaleString() : "-";
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+        return "—";
+    }
+
+    return date.toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+    });
+}
+
+function formatDateInputValue(value) {
+    if (!value) {
+        return "";
+    }
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+        return "";
+    }
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
 }
 
 export function AdminDashboard({ initialItems, initialTableName, tableNames, email, initialSection = "dashboard" }) {
@@ -451,7 +488,7 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
     const [materialForm, setMaterialForm] = useState(EMPTY_MATERIAL_FORM);
     const [materialRateDrafts, setMaterialRateDrafts] = useState({});
     const [editingMaterialCode, setEditingMaterialCode] = useState(null);
-    const [editDraft, setEditDraft] = useState({ name: "", rate: "", quantity: "" });
+    const [editDraft, setEditDraft] = useState({ name: "", rate: "", quantity: "", date: "" });
     const [analyticsDatePreset, setAnalyticsDatePreset] = useState("all");
     const [analyticsDateFrom, setAnalyticsDateFrom] = useState("");
     const [analyticsDateTo, setAnalyticsDateTo] = useState("");
@@ -936,7 +973,7 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
         try {
             const responseData = await apiFetch("/api/admin/raw-materials", {
                 method: "POST",
-                json: { name, code, rate, quantity }
+                json: { name, code, rate, quantity,date: materialForm.date}
             });
             if (responseData?.material) {
                 setRawMaterials((current) => {
@@ -980,19 +1017,21 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
         }
     }
 
-    function startEditingMaterial(material) {
-        setEditingMaterialCode(material.code);
-        setEditDraft({
-            name: material.name ?? "",
-            rate: String(material.rate ?? ""),
-            quantity: String(material.quantity ?? 0)
-        });
-    }
+   function startEditingMaterial(material) {
+    setEditingMaterialCode(material.code);
+    setEditDraft({
+        name: material.name ?? "",
+        rate: String(material.rate ?? ""),
+        quantity: String(material.quantity ?? 0),
+        date: formatDateInputValue(material.date),
+    });
+}
 
     async function saveMaterialEdit(material) {
         const name = (editDraft.name ?? "").trim();
         const rate = Number(editDraft.rate);
         const quantity = Number(editDraft.quantity);
+        const date = editDraft.date;
         if (!name) {
             toast.error("Enter a raw material name.");
             return;
@@ -1009,7 +1048,7 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
         try {
             const responseData = await apiFetch("/api/admin/raw-materials", {
                 method: "PATCH",
-                json: { code: material.code, name, rate, quantity }
+                json: { code: material.code, name, rate, quantity, date }
             });
             if (responseData?.material) {
                 const updated = responseData.material;
@@ -1017,7 +1056,7 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
             }
             toast.success("Raw material updated");
             setEditingMaterialCode(null);
-            setEditDraft({ name: "", rate: "", quantity: "" });
+            setEditDraft({ name: "", rate: "", quantity: "", date: "" });
         }
         catch (error) {
             toast.error(error instanceof Error ? error.message : "Failed to update raw material");
@@ -1029,7 +1068,7 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
 
     function cancelEditingMaterial() {
         setEditingMaterialCode(null);
-        setEditDraft({ name: "", rate: "", quantity: "" });
+        setEditDraft({ name: "", rate: "", quantity: "", date: "" });
     }
 
     async function deleteSelectedMaterials() {
@@ -1554,7 +1593,7 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                         </div>
                     </CardHeader>
                     <CardBody className="space-y-4 p-4 sm:p-6">
-                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
                             <div>
                                 <Label>Code</Label>
                                 <Input value={materialForm.code} onChange={(event) => setMaterialForm((current) => ({ ...current, code: event.target.value }))} placeholder="Code" />
@@ -1570,6 +1609,10 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                             <div>
                                 <Label>Quantity</Label>
                                 <Input value={materialForm.quantity} onChange={(event) => setMaterialForm((current) => ({ ...current, quantity: event.target.value }))} placeholder="0" inputMode="decimal" />
+                            </div>
+                            <div>
+                                <Label>Date</Label>
+                                <Input value={materialForm.date} onChange={(event) => setMaterialForm((current) => ({ ...current, date: event.target.value }))} placeholder="Date" type="date" />
                             </div>
                         </div>
                         <div className="flex flex-wrap gap-2 sm:gap-3">
@@ -1632,6 +1675,20 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                                                                 className="mt-1"
                                                             />
                                                         </div>
+                                                        <div className="mt-2">
+    <Label>Date</Label>
+    <Input
+        type="date"
+        value={editDraft.date ?? ""}
+        onChange={(event) =>
+            setEditDraft((current) => ({
+                ...current,
+                date: event.target.value,
+            }))
+        }
+        className="mt-1"
+    />
+</div>  
                                                     </>
                                                 ) : (
                                                     <>
@@ -1680,6 +1737,7 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                                         <th className="px-4 py-3 font-semibold">Name</th>
                                         <th className="px-4 py-3 font-semibold">Rate</th>
                                         <th className="px-4 py-3 font-semibold">Quantity</th>
+                                        <th className="px-4 py-3 font-semibold">Date</th>
                                         <th className="px-4 py-3 font-semibold text-right">Action</th>
                                     </tr>
                                 </thead>
@@ -1729,6 +1787,24 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                                                         <span className="text-sm text-slate-500">{formatAmount(material.quantity ?? 0)}</span>
                                                     )}
                                                 </td>
+                                                <td className="px-4 py-3">
+    {isEditing ? (
+        <Input
+            type="date"
+            value={editDraft.date ?? ""}
+            onChange={(event) =>
+                setEditDraft((current) => ({
+                    ...current,
+                    date: event.target.value,
+                }))
+            }
+        />
+    ) : (
+        <span className="text-sm text-slate-500">
+            {formatRawMaterialDate(material.date)}
+        </span>
+    )}
+</td>
                                                 <td className="px-4 py-3 text-right">
                                                     {isEditing ? (
                                                         <>
@@ -1751,7 +1827,7 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                                         );
                                     }) : (
                                         <tr>
-                                            <td className="px-4 py-5 text-sm text-slate-500" colSpan={6}>
+                                            <td className="px-4 py-5 text-sm text-slate-500" colSpan={7}>
                                                 No raw materials match your search.
                                             </td>
                                         </tr>
@@ -2079,3 +2155,20 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
         </div>
     );
 }
+
+function formatDateTime(value) {
+    if (!value) return "—";
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) return "—";
+
+    return date.toLocaleString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+    });
+}
+

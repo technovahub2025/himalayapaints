@@ -6,7 +6,6 @@
     return nextHeaders;
 }
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
-const isProductionBuild = import.meta.env.PROD;
 const rawFetch = globalThis.fetch?.bind(globalThis);
 function resolveApiUrl(input) {
     if (typeof input !== "string") {
@@ -15,7 +14,7 @@ function resolveApiUrl(input) {
     if (/^https?:\/\//i.test(input)) {
         return input;
     }
-    if (!isProductionBuild && apiBaseUrl && input.startsWith("/api/")) {
+    if (apiBaseUrl && input.startsWith("/api/")) {
         return `${apiBaseUrl}${input}`;
     }
     return input;

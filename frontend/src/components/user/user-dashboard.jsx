@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileSpreadsheet, FileText, LoaderCircle, Pencil, Printer, RefreshCw, Save, ChevronDown, Download, Upload } from "lucide-react";
@@ -192,12 +192,12 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
         }));
     }
     function handleAddPackRow() {
-        setPackRows((current) => [...current, { packSize: "", quantity: "" }]);
+        setPackRows((current) => [...current, { packSize: "", quantity: "", unit: "litre" }]);
     }
     function handleDeletePackRow(index) {
         setPackRows((current) => {
             const next = current.filter((_, rowIndex) => rowIndex !== index);
-            return next.length > 0 ? next : [{ packSize: "", quantity: "" }];
+            return next.length > 0 ? next : [{ packSize: "", quantity: "", unit: "litre" }];
         });
     }
     function handlePackSizeChange(index, value) {
@@ -205,6 +205,18 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
     }
     function handlePackQuantityChange(index, value) {
         setPackRows((current) => current.map((packRow, rowIndex) => (rowIndex === index ? { ...packRow, quantity: value } : packRow)));
+    }
+    function handlePackUnitChange(index, value) {
+        setPackRows((current) =>
+            current.map((packRow, rowIndex) =>
+                rowIndex === index
+                    ? {
+                        ...packRow,
+                        unit: value === "kg" ? "kg" : "litre"
+                    }
+                    : packRow
+            )
+        );
     }
     function clearCurrentDraft() {
         if (typeof window !== "undefined") {
@@ -324,24 +336,72 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
         const override = manualKgValues[item._id];
         return sum + Number(override ?? calculated);
     }, 0);
-    const packResults = packRows.map((row) => Number(row.packSize || 0) * Number(row.quantity || 0));
-    const packGrandTotal = packResults.reduce((sum, value) => sum + value, 0);
-    const packExportRows = packRows.map((row, index) => {
-        const result = Number(row.packSize || 0) * Number(row.quantity || 0);
-        return {
-            rowNumber: index + 1,
-            packSize: row.packSize,
-            quantity: row.quantity,
-            result
-        };
-    });
-    const exportPackRows = packRows
-        .filter((row) => row.packSize.trim() !== "" || row.quantity.trim() !== "")
-        .map((row) => ({
-        packSize: row.packSize,
-        quantity: row.quantity,
+    const actualKgTotal = items.reduce((sum, item) => {
+        const value = String(actuals[item._id] ?? "").trim();
+        if (value === "") return sum;
+
+        const numericValue = Number(value);
+        return sum + (Number.isFinite(numericValue) && numericValue >= 0 ? numericValue : 0);
+    }, 0);
+    const packRowsWithResults = packRows.map((row) => ({
+        ...row,
+        unit: row.unit === "kg" ? "kg" : "litre",
         result: Number(row.packSize || 0) * Number(row.quantity || 0)
     }));
+
+    const totalLitre = packRowsWithResults
+        .filter((row) => row.unit === "litre")
+        .reduce((sum, row) => sum + row.result, 0);
+
+    const totalKg = packRowsWithResults
+        .filter((row) => row.unit === "kg")
+        .reduce((sum, row) => sum + row.result, 0);
+
+    const specificGravityValue = Number(batchDetails.specificGravity);
+    const actualKgValue = Number(actualKgTotal);
+
+    const litreOpKg =
+        Number.isFinite(specificGravityValue) && specificGravityValue > 0
+            ? totalLitre * specificGravityValue
+            : 0;
+
+    const litreYieldPercent =
+        actualKgValue > 0
+            ? (litreOpKg / actualKgValue) * 100
+            : 0;
+
+    const kgYieldPercent =
+        actualKgValue > 0
+            ? (totalKg / actualKgValue) * 100
+            : 0;
+
+    const hasLitreRows = packRowsWithResults.some((row) => row.unit === "litre");
+    const hasKgRows = packRowsWithResults.some((row) => row.unit === "kg");
+
+    const finalYieldPercent =
+        hasLitreRows && hasKgRows
+            ? litreYieldPercent + kgYieldPercent
+            : hasLitreRows
+                ? litreYieldPercent
+                : kgYieldPercent;
+
+    const packExportRows = packRowsWithResults.map((row, index) => ({
+        rowNumber: index + 1,
+        packSize: row.packSize,
+        quantity: row.quantity,
+        unit: row.unit,
+        result: row.result
+    }));
+
+    const exportPackRows = packRowsWithResults
+        .filter((row) => row.packSize.trim() !== "" || row.quantity.trim() !== "")
+        .map((row) => ({
+            packSize: row.packSize,
+            quantity: row.quantity,
+            unit: row.unit,
+            result: row.result
+        }));
+
     const hasPackData = exportPackRows.length > 0;
     const exportRows = items.map((item) => {
         const percentage = safePercent(item.quantity, totalQuantity);
@@ -407,6 +467,14 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
                 signature: signatures[item._id] ?? ""
             };
         });
+        const missingRemarks = lines.find(
+            (line) => line.actualQty < line.stdQty && !String(line.remarks ?? "").trim()
+        );
+        if (missingRemarks) {
+            toast.error(`Remarks are required for ${missingRemarks.materialName} because Actual Qty is less than Standard Qty.`);
+            return;
+        }
+
         const invalidLine = lines.find((line) => Number.isNaN(line.stdQty) || Number.isNaN(line.actualQty));
         if (invalidLine) {
             toast.error("Please enter valid numbers for all production quantities.");
@@ -431,7 +499,8 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
                         .filter((row) => row.packSize.trim() !== "" || row.quantity.trim() !== "")
                         .map((row) => ({
                         packSize: row.packSize.trim(),
-                        quantity: row.quantity.trim()
+                        quantity: row.quantity.trim(),
+                    unit: row.unit === "kg" ? "kg" : "litre"
                     })),
                     lines
                 })
@@ -461,7 +530,7 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
             ["TOTAL", "Dynamic source list", `${distributedTotal.toLocaleString()} KG`, "Manual actuals only", "Remarks", "Signature"]
         ];
         if (hasPackData) {
-            worksheetData.push([], ["PACK SIZE", "QTY", "TOTAL"], ...exportPackRows.map((row) => [row.packSize, row.quantity, String(row.result)]), ["BULK", "", String(packGrandTotal)]);
+            worksheetData.push([], ["PACK SIZE", "QTY", "UNIT", "TOTAL"], ...exportPackRows.map((row) => [row.packSize, row.quantity, row.unit, String(row.result)]));
         }
         const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
         const border = {
@@ -601,165 +670,579 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
         XLSX.writeFile(workbook, `${tableName || "table"}-production-sheet.xlsx`);
     }
     async function createPdfDocument() {
-        const { jsPDF } = await import("jspdf");
-        const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-        const pageWidth = 297;
-        const marginX = 5;
-        const gridWidth = pageWidth - marginX * 2;
-        const colWidths = [18, 95, 28, 34, 55, 57];
-        const xPositions = [
-            marginX,
-            marginX + colWidths[0],
-            marginX + colWidths[0] + colWidths[1],
-            marginX + colWidths[0] + colWidths[1] + colWidths[2],
-            marginX + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3],
-            marginX + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3] + colWidths[4]
-        ];
-        const drawCell = (x, y, w, h, text = "", opts) => {
-            const { align = "left", bold = false, fillColor = null, textColor = [0, 0, 0], fontSize = 7.5, paddingX = 2 } = opts ?? {};
-            doc.setDrawColor(0, 0, 0);
-            doc.setLineWidth(0.2);
-            if (fillColor) {
-                doc.setFillColor(fillColor[0], fillColor[1], fillColor[2]);
-                doc.rect(x, y, w, h, "FD");
-            }
-            else {
-                doc.rect(x, y, w, h);
-            }
-            doc.setFont("helvetica", bold ? "bold" : "normal");
-            doc.setFontSize(fontSize);
-            doc.setTextColor(textColor[0], textColor[1], textColor[2]);
-            const textY = y + h / 2 + fontSize / 3.4;
-            const textX = align === "center" ? x + w / 2 : align === "right" ? x + w - paddingX : x + paddingX;
-            doc.text(String(text ?? ""), textX, textY, {
-                align,
-                maxWidth: w - paddingX * 2
-            });
-        };
-        let y = 6;
-        drawCell(marginX, y, gridWidth, 7, "PRODUCTION BATCH SHEET", {
+    const { jsPDF } = await import("jspdf");
+
+    const doc = new jsPDF({
+        orientation: "landscape",
+        unit: "mm",
+        format: "a4"
+    });
+
+    const pageWidth = 297;
+    const marginX = 5;
+    const gridWidth = pageWidth - marginX * 2;
+
+    // 7 columns:
+    // % | RAW MATERIAL CODE | STD QTY | ACTUAL QTY | TIME | REMARKS | SIGNATURE
+    const colWidths = [18, 88, 27, 32, 45, 30, 52];
+
+    const xPositions = [
+        marginX,
+        marginX + colWidths[0],
+        marginX + colWidths[0] + colWidths[1],
+        marginX + colWidths[0] + colWidths[1] + colWidths[2],
+        marginX + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3],
+        marginX + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3] + colWidths[4],
+        marginX + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3] + colWidths[4] + colWidths[5]
+    ];
+
+    const drawCell = (x, y, w, h, text = "", opts) => {
+        const {
+            align = "left",
+            bold = false,
+            fillColor = null,
+            textColor = [0, 0, 0],
+            fontSize = 7.5,
+            paddingX = 2
+        } = opts ?? {};
+
+        doc.setDrawColor(0, 0, 0);
+        doc.setLineWidth(0.2);
+
+        if (fillColor) {
+            doc.setFillColor(
+                fillColor[0],
+                fillColor[1],
+                fillColor[2]
+            );
+            doc.rect(x, y, w, h, "FD");
+        } else {
+            doc.rect(x, y, w, h);
+        }
+
+        doc.setFont(
+            "helvetica",
+            bold ? "bold" : "normal"
+        );
+
+        doc.setFontSize(fontSize);
+
+        doc.setTextColor(
+            textColor[0],
+            textColor[1],
+            textColor[2]
+        );
+
+        const textY =
+            y + h / 2 + fontSize / 3.4;
+
+        const textX =
+            align === "center"
+                ? x + w / 2
+                : align === "right"
+                    ? x + w - paddingX
+                    : x + paddingX;
+
+        doc.text(String(text ?? ""), textX, textY, {
+            align,
+            maxWidth: w - paddingX * 2
+        });
+    };
+
+    let y = 6;
+
+    // TITLE
+    drawCell(
+        marginX,
+        y,
+        gridWidth,
+        7,
+        "PRODUCTION BATCH SHEET",
+        {
             align: "center",
             bold: true,
             fontSize: 9.5
-        });
-        y += 7;
-        drawCell(xPositions[0], y, colWidths[0], 7, "PRODUCT:", { bold: true });
-        drawCell(xPositions[1], y, colWidths[1] + colWidths[2], 7, formatProductLabel(tableName || "Product 1"), { bold: false });
-        drawCell(xPositions[3], y, colWidths[3], 7, "BATCH SIZE", { bold: true });
-        drawCell(xPositions[4], y, colWidths[4], 7, "SPECIFIC GRAVITY", { bold: true });
-        drawCell(xPositions[5], y, colWidths[5], 7, "VISCOSITY", { bold: true });
-        y += 7;
-        drawCell(xPositions[0], y, colWidths[0], 7, "BATCH NO", { bold: true });
-        drawCell(xPositions[1], y, colWidths[1], 7, batchDetails.batchNo || "", { bold: false });
-        drawCell(xPositions[2], y, colWidths[2], 7, "STD:", { bold: true });
-        drawCell(xPositions[3], y, colWidths[3], 7, targetKg ? `${Number(targetKg).toLocaleString()} KG` : "", { bold: false });
-        drawCell(xPositions[4], y, colWidths[4], 7, batchDetails.specificGravity || "", { bold: false });
-        drawCell(xPositions[5], y, colWidths[5], 7, formatSecondsValue(batchDetails.viscosity), { bold: false });
-        y += 7;
-        drawCell(xPositions[0], y, colWidths[0], 7, "DATE", { bold: true });
-        drawCell(xPositions[1], y, colWidths[1], 7, batchDetails.date || "", { bold: false });
-        drawCell(xPositions[2], y, colWidths[2], 7, "ACTUAL:", { bold: true });
-        drawCell(xPositions[3], y, colWidths[3], 7, "", { bold: false });
-        drawCell(xPositions[4], y, colWidths[4], 7, batchDetails.actuals || "", { bold: false });
-        drawCell(xPositions[5], y, colWidths[5], 7, "", { bold: false });
-        // Split the batch details block from the raw material table so the PDF reads
-        // like two separate tables, matching the reference layout.
-        y += 10;
-        drawCell(xPositions[0], y, colWidths[0], 7, "%", { bold: true });
-        drawCell(xPositions[1], y, colWidths[1], 7, "RAW MATERIAL CODE", { bold: true });
-        drawCell(xPositions[2], y, colWidths[2], 7, "STD QTY", { bold: true });
-        drawCell(xPositions[3], y, colWidths[3], 7, "ACTUAL QTY", { bold: true });
-        drawCell(xPositions[4], y, colWidths[4], 7, "REMARKS", { bold: true });
-        drawCell(xPositions[5], y, colWidths[5], 7, "SIGNATURE", { bold: true });
-        const mainRows = items.length;
-        const rowHeight = 7;
-        y += 7;
-        for (let i = 0; i < mainRows; i += 1) {
-            const item = items[i];
-            const percentage = safePercent(item.quantity, totalQuantity).toFixed(2);
-            const suggestedKg = scaleQuantity(item.quantity, targetNumber);
-            const kgValue = manualKgValues[item._id] ?? String(suggestedKg);
-            const actualValue = actuals[item._id] ?? "";
-            const remarkValue = getRemarkValue(item._id);
-            const signatureValue = getSignatureValue(item._id);
-            drawCell(xPositions[0], y, colWidths[0], rowHeight, `${percentage}%`, { align: "center" });
-            drawCell(xPositions[1], y, colWidths[1], rowHeight, item.name, { align: "left" });
-            drawCell(xPositions[2], y, colWidths[2], rowHeight, formatKgValue(kgValue), { align: "center" });
-            drawCell(xPositions[3], y, colWidths[3], rowHeight, actualValue, { align: "center" });
-            drawCell(xPositions[4], y, colWidths[4], rowHeight, remarkValue, { align: "left" });
-            drawCell(xPositions[5], y, colWidths[5], rowHeight, signatureValue, { align: "left" });
-            y += rowHeight;
         }
-        // Leave a visible white band between the two separate tables.
-        y += 10;
-        const packBodyRows = exportPackRows.length;
-        doc.setDrawColor(0, 0, 0);
-        doc.setLineWidth(0.2);
-        if (hasPackData) {
-            drawCell(xPositions[0], y, colWidths[0], rowHeight, "PACK SIZE", {
-                bold: true,
-                textColor: [220, 38, 38]
-            });
-            drawCell(xPositions[1], y, colWidths[1], rowHeight, "QTY", {
-                bold: true,
-                textColor: [220, 38, 38]
-            });
-            drawCell(xPositions[2], y, colWidths[2], rowHeight, "TOTAL", {
-                bold: true,
-                textColor: [220, 38, 38]
-            });
-            y += rowHeight;
-            for (let i = 0; i < packBodyRows; i += 1) {
-                const row = exportPackRows[i];
-                drawCell(xPositions[0], y, colWidths[0], rowHeight, row?.packSize || "", { align: "center" });
-                drawCell(xPositions[1], y, colWidths[1], rowHeight, row?.quantity || "", { align: "center" });
-                drawCell(xPositions[2], y, colWidths[2], rowHeight, row ? String(row.result) : "", { align: "center" });
-                y += rowHeight;
+    );
+
+    y += 7;
+
+    // BATCH DETAILS
+    drawCell(
+        xPositions[0],
+        y,
+        colWidths[0],
+        7,
+        "PRODUCT:",
+        { bold: true }
+    );
+
+    drawCell(
+        xPositions[1],
+        y,
+        colWidths[1] + colWidths[2],
+        7,
+        formatProductLabel(tableName || "Product 1"),
+        { bold: false }
+    );
+
+    drawCell(
+        xPositions[3],
+        y,
+        colWidths[3],
+        7,
+        "BATCH SIZE",
+        { bold: true }
+    );
+
+    drawCell(
+        xPositions[4],
+        y,
+        colWidths[4],
+        7,
+        "SPECIFIC GRAVITY",
+        { bold: true }
+    );
+
+    drawCell(
+        xPositions[5],
+        y,
+        gridWidth - (xPositions[5] - marginX),
+        7,
+        "VISCOSITY",
+        { bold: true }
+    );
+
+    y += 7;
+
+    drawCell(
+        xPositions[0],
+        y,
+        colWidths[0],
+        7,
+        "BATCH NO",
+        { bold: true }
+    );
+
+    drawCell(
+        xPositions[1],
+        y,
+        colWidths[1],
+        7,
+        batchDetails.batchNo || "",
+        { bold: false }
+    );
+
+    drawCell(
+        xPositions[2],
+        y,
+        colWidths[2],
+        7,
+        "STD:",
+        { bold: true }
+    );
+
+    drawCell(
+        xPositions[3],
+        y,
+        colWidths[3],
+        7,
+        targetKg
+            ? `${Number(targetKg).toLocaleString()} KG`
+            : "",
+        { bold: false }
+    );
+
+    drawCell(
+        xPositions[4],
+        y,
+        colWidths[4],
+        7,
+        batchDetails.specificGravity || "",
+        { bold: false }
+    );
+
+    drawCell(
+        xPositions[5],
+        y,
+        gridWidth - (xPositions[5] - marginX),
+        7,
+        formatSecondsValue(batchDetails.viscosity),
+        { bold: false }
+    );
+
+    y += 7;
+
+    drawCell(
+        xPositions[0],
+        y,
+        colWidths[0],
+        7,
+        "DATE",
+        { bold: true }
+    );
+
+    drawCell(
+        xPositions[1],
+        y,
+        colWidths[1],
+        7,
+        batchDetails.date || "",
+        { bold: false }
+    );
+
+    drawCell(
+        xPositions[2],
+        y,
+        colWidths[2],
+        7,
+        "ACTUAL:",
+        { bold: true }
+    );
+
+    drawCell(
+        xPositions[3],
+        y,
+        colWidths[3],
+        7,
+        "",
+        { bold: false }
+    );
+
+    drawCell(
+        xPositions[4],
+        y,
+        colWidths[4],
+        7,
+        batchDetails.actuals || "",
+        { bold: false }
+    );
+
+    drawCell(
+        xPositions[5],
+        y,
+        gridWidth - (xPositions[5] - marginX),
+        7,
+        "",
+        { bold: false }
+    );
+
+    // Separate batch details and raw material table
+    y += 10;
+
+    // RAW MATERIAL TABLE HEADER
+    drawCell(
+        xPositions[0],
+        y,
+        colWidths[0],
+        7,
+        "%",
+        { bold: true }
+    );
+
+    drawCell(
+        xPositions[1],
+        y,
+        colWidths[1],
+        7,
+        "RAW MATERIAL CODE",
+        { bold: true }
+    );
+
+    drawCell(
+        xPositions[2],
+        y,
+        colWidths[2],
+        7,
+        "STD QTY",
+        { bold: true }
+    );
+
+    drawCell(
+        xPositions[3],
+        y,
+        colWidths[3],
+        7,
+        "ACTUAL QTY",
+        { bold: true }
+    );
+
+    // TIME
+    drawCell(
+        xPositions[4],
+        y,
+        colWidths[4],
+        7,
+        "TIME",
+        { bold: true }
+    );
+
+    // REMARKS
+    drawCell(
+        xPositions[5],
+        y,
+        colWidths[5],
+        7,
+        "REMARKS",
+        { bold: true }
+    );
+
+    // SIGNATURE
+    drawCell(
+        xPositions[6],
+        y,
+        colWidths[6],
+        7,
+        "SIGNATURE",
+        { bold: true }
+    );
+
+    const mainRows = items.length;
+    const rowHeight = 7;
+
+    y += 7;
+
+    // RAW MATERIAL ROWS
+    for (let i = 0; i < mainRows; i += 1) {
+        const item = items[i];
+
+        const percentage =
+            safePercent(
+                item.quantity,
+                totalQuantity
+            ).toFixed(2);
+
+        const suggestedKg =
+            scaleQuantity(
+                item.quantity,
+                targetNumber
+            );
+
+        const kgValue =
+            manualKgValues[item._id] ??
+            String(suggestedKg);
+
+        const actualValue =
+            actuals[item._id] ?? "";
+
+        const remarkValue =
+            getRemarkValue(item._id);
+
+        const signatureValue =
+            getSignatureValue(item._id);
+
+        // %
+        drawCell(
+            xPositions[0],
+            y,
+            colWidths[0],
+            rowHeight,
+            `${percentage}%`,
+            { align: "center" }
+        );
+
+        // RAW MATERIAL CODE
+        drawCell(
+            xPositions[1],
+            y,
+            colWidths[1],
+            rowHeight,
+            item.name,
+            { align: "left" }
+        );
+
+        // STD QTY
+        drawCell(
+            xPositions[2],
+            y,
+            colWidths[2],
+            rowHeight,
+            formatKgValue(kgValue),
+            { align: "center" }
+        );
+
+        // ACTUAL QTY
+        drawCell(
+            xPositions[3],
+            y,
+            colWidths[3],
+            rowHeight,
+            actualValue,
+            { align: "center" }
+        );
+
+        // TIME - currently empty
+        drawCell(
+            xPositions[4],
+            y,
+            colWidths[4],
+            rowHeight,
+            "",
+            { align: "center" }
+        );
+
+        // REMARKS
+        drawCell(
+            xPositions[5],
+            y,
+            colWidths[5],
+            rowHeight,
+            remarkValue,
+            { align: "left" }
+        );
+
+        // SIGNATURE
+        drawCell(
+            xPositions[6],
+            y,
+            colWidths[6],
+            rowHeight,
+            signatureValue,
+            { align: "left" }
+        );
+
+        y += rowHeight;
+    }
+
+    // Space before Pack Size table
+    y += 10;
+
+    // =========================================================
+    // PACK SIZE - EMPTY 5 COLUMN TABLE
+    // =========================================================
+
+    const packColumnCount = 5;
+    const packColumnWidth =
+        gridWidth / packColumnCount;
+
+    const packXPositions = Array.from(
+        { length: packColumnCount },
+        (_, index) =>
+            marginX + index * packColumnWidth
+    );
+
+    const packHeaderHeight = 7;
+    const packEmptyRowHeight = 9;
+
+    // PACK SIZE TITLE
+    drawCell(
+        marginX,
+        y,
+        gridWidth,
+        packHeaderHeight,
+        "PACK SIZE",
+        {
+            bold: true,
+            align: "left"
+        }
+    );
+
+    y += packHeaderHeight;
+
+    // 5 PACK SIZE ROWS
+    for (let row = 0; row < 5; row += 1) {
+    for (
+        let column = 0;
+        column < packColumnCount;
+        column += 1
+    ) {
+        drawCell(
+            packXPositions[column],
+            y,
+            packColumnWidth,
+            packEmptyRowHeight,
+            "",
+            {
+                align: "center"
             }
-            drawCell(xPositions[0], y, colWidths[0], rowHeight, "BULK", {
-                bold: true,
-                textColor: [220, 38, 38]
-            });
-            drawCell(xPositions[1], y, colWidths[1], rowHeight, "", { align: "center" });
-            drawCell(xPositions[2], y, colWidths[2], rowHeight, String(packGrandTotal), {
-                bold: true,
-                textColor: [220, 38, 38]
+        );
+    }
+
+        y += packEmptyRowHeight;
+    }
+
+    // LOW STOCK WARNING - included in both PDF export and print.
+    const lowStockRows = items.reduce((rows, item) => {
+        const actualRaw = actuals[item._id];
+
+        // Only show the warning when an actual quantity has been entered.
+        if (
+            actualRaw === undefined ||
+            actualRaw === null ||
+            String(actualRaw).trim() === ""
+        ) {
+            return rows;
+        }
+
+        const actualQty = Number(String(actualRaw).replace(/,/g, ""));
+        const standardRaw =
+            manualKgValues[item._id] ??
+            scaleQuantity(item.quantity, targetNumber);
+        const standardQty = Number(String(standardRaw).replace(/,/g, ""));
+
+        if (
+            Number.isFinite(actualQty) &&
+            Number.isFinite(standardQty) &&
+            actualQty < standardQty
+        ) {
+            rows.push({
+                name: item.name || "Raw Material",
+                actualQty,
+                standardQty
             });
         }
-        return doc;
+
+        return rows;
+    }, []);
+
+    if (lowStockRows.length > 0) {
+        const lowStockLines = lowStockRows.map(
+            (row) =>
+                `Low Stock: ${row.name} — Actual Qty: ${formatKgValue(row.actualQty)}, Standard Qty: ${formatKgValue(row.standardQty)}.`
+        );
+
+        const lowStockText = doc.splitTextToSize(
+            lowStockLines.join("\n"),
+            gridWidth - 8
+        );
+
+        const lineHeight = 4.5;
+        const boxHeight = 17 + lowStockText.length * lineHeight;
+        const lowStockY = 210 - boxHeight - 5;
+
+        doc.setDrawColor(220, 38, 38);
+        doc.setFillColor(254, 242, 242);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(
+            marginX,
+            lowStockY,
+            gridWidth,
+            boxHeight,
+            2,
+            2,
+            "FD"
+        );
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.setTextColor(185, 28, 28);
+        doc.text("LOW STOCK", marginX + 3, lowStockY + 6);
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.text(lowStockText, marginX + 3, lowStockY + 11);
+
+        y += boxHeight + 7;
     }
-    async function exportPdf() {
-        const doc = await createPdfDocument();
-        doc.save(`${tableName || "table"}-production-sheet.pdf`);
-    }
-    async function handlePrint() {
-        const doc = await createPdfDocument();
-        doc.autoPrint();
-        const blobUrl = URL.createObjectURL(doc.output("blob"));
-        const iframe = document.createElement("iframe");
-        iframe.style.position = "fixed";
-        iframe.style.right = "0";
-        iframe.style.bottom = "0";
-        iframe.style.width = "0";
-        iframe.style.height = "0";
-        iframe.style.border = "0";
-        iframe.src = blobUrl;
-        iframe.onload = () => {
-            iframe.contentWindow?.focus();
-            iframe.contentWindow?.print();
-            window.setTimeout(() => {
-                URL.revokeObjectURL(blobUrl);
-                iframe.remove();
-            }, 1000);
-        };
-        document.body.appendChild(iframe);
-    }
+
+    return doc;
+}    
     function formatRawMaterialDate(value) {
         if (!value)
-            return "—";
+            return "â€”";
         const d = new Date(value);
         if (Number.isNaN(d.getTime()))
-            return "—";
+            return "â€”";
         return d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
     }
     const rawMaterialExportRows = rawMaterials.map((material) => {
@@ -886,7 +1369,42 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
             y += rowHeight;
         }
         return doc;
+    }    
+    async function exportPdf() {
+        const doc = await createPdfDocument();
+        doc.save(`${tableName || "table"}-production-sheet.pdf`);
     }
+
+    async function handlePrint() {
+        const doc = await createPdfDocument();
+
+        const blob = doc.output("blob");
+        const blobUrl = URL.createObjectURL(blob);
+
+        const iframe = document.createElement("iframe");
+        iframe.style.position = "fixed";
+        iframe.style.left = "-9999px";
+        iframe.style.top = "0";
+        iframe.style.width = "1px";
+        iframe.style.height = "1px";
+        iframe.style.border = "0";
+        iframe.src = blobUrl;
+
+        document.body.appendChild(iframe);
+
+        iframe.onload = () => {
+            window.setTimeout(() => {
+                iframe.contentWindow?.focus();
+                iframe.contentWindow?.print();
+            }, 500);
+        };
+
+        window.setTimeout(() => {
+            URL.revokeObjectURL(blobUrl);
+            iframe.remove();
+        }, 60000);
+    }
+
     async function exportRawMaterialPdf() {
         if (rawMaterials.length === 0) {
             toast.error("No raw materials to export");
@@ -1118,8 +1636,23 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
 
         <RawMaterialTable actuals={actuals} distributedTotal={distributedTotal} items={items} manualKgValues={manualKgValues} onActualChange={handleActualChange} onManualKgChange={handleManualKgChange} onRemarkChange={handleRemarkChange} onSignatureChange={handleSignatureChange} onTargetKgChange={handleTargetKgChange} remarks={remarks} signatures={signatures} targetKg={targetKg}/>
 
-        <PackSizeTable onAddRow={handleAddPackRow} onDeleteRow={handleDeletePackRow} onPackSizeChange={handlePackSizeChange} onQuantityChange={handlePackQuantityChange} packGrandTotal={packGrandTotal} packRows={packRows}/>
-      </>,
+        <PackSizeTable
+    onAddRow={handleAddPackRow}
+    onDeleteRow={handleDeletePackRow}
+    onPackSizeChange={handlePackSizeChange}
+    onQuantityChange={handlePackQuantityChange}
+    onUnitChange={handlePackUnitChange}
+    packRows={packRows}
+    totalLitre={totalLitre}
+    totalKg={totalKg}
+    litreOpKg={litreOpKg}
+    litreYieldPercent={litreYieldPercent}
+    kgYieldPercent={kgYieldPercent}
+    finalYieldPercent={finalYieldPercent}
+    specificGravity={batchDetails.specificGravity}
+    actualKg={actualKgTotal}
+/>
+      </>
       ) : null}
 
       {detailsType === "rawMaterial" ? (
@@ -1179,7 +1712,7 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
                     const dateValue = material.date ? new Date(material.date) : null;
                     const displayDate = dateValue && !Number.isNaN(dateValue.getTime())
                       ? dateValue.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" })
-                      : "—";
+                      : "â€”";
                     return (
                       <tr key={material.code} className="border-t border-slate-200">
                         <td className="px-4 py-3 text-sm font-semibold text-slate-950">{material.code || "-"}</td>
@@ -1193,8 +1726,27 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
               </table>
             </div>
           )}
-        </Card>,
+        </Card>
       ) : null}
 
     </div>);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
