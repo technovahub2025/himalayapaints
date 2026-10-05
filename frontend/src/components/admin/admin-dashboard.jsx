@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { apiFetch } from "@/services/api-client";
 import { Badge, Button, Card, CardBody, CardHeader, Input, Label, Select, Subtitle, Title } from "@/components/ui";
 import { formatProductLabel } from "@/lib/product-label";
-import { useAuthSessionContext } from "@/components/providers";
 
 const EMPTY_TABLE_FORM = { name: "", duplicateFrom: "" };
 const EMPTY_MATERIAL_FORM = {
@@ -279,12 +278,9 @@ function PieChart({ data, emptyLabel, valueLabel = "KG" }) {
 
 function AdminSettings({ email }) {
     const navigate = useNavigate();
-    const authSession = useAuthSessionContext();
     const [users, setUsers] = useState([]);
     const [selectedUserId, setSelectedUserId] = useState("");
     const [userEmail, setUserEmail] = useState(email || "");
-    const [newPassword, setNewPassword] = useState("");
-    const [confirmPassword, setConfirmPassword] = useState("");
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
@@ -316,8 +312,6 @@ function AdminSettings({ email }) {
         const user = users.find((entry) => String(entry._id) === userId);
         setSelectedUserId(userId);
         setUserEmail(user?.email ?? "");
-        setNewPassword("");
-        setConfirmPassword("");
     }
 
     async function saveUser(event) {
@@ -332,33 +326,13 @@ function AdminSettings({ email }) {
             toast.error("Enter a valid user ID/email");
             return;
         }
-        if (!newPassword && normalizedEmail === target.email) {
-            toast.error("Change the user ID/email or enter a new password");
-            return;
-        }
-        if (newPassword.length > 0 && newPassword.length < 6) {
-            toast.error("Password must be at least 6 characters");
-            return;
-        }
-        if (newPassword !== confirmPassword) {
-            toast.error("Passwords do not match");
-            return;
-        }
         setSaving(true);
         try {
             const data = await apiFetch(`/api/admin/users/${encodeURIComponent(selectedUserId)}`, {
                 method: "PATCH",
-                json: { email: normalizedEmail, newPassword }
+                json: { email: normalizedEmail }
             });
             toast.success(`Account updated for ${data.user?.email ?? normalizedEmail}`);
-            setNewPassword("");
-            setConfirmPassword("");
-            if (data.requiresRelogin) {
-                await apiFetch("/api/auth/logout", { method: "POST" });
-                await authSession?.refreshSession?.();
-                navigate("/login", { replace: true });
-                return;
-            }
             await loadUsers();
         }
         catch (error) {
@@ -374,7 +348,7 @@ function AdminSettings({ email }) {
             <section className="rounded-[2rem] border border-slate-200/80 bg-[radial-gradient(circle_at_top_left,rgba(13,148,136,0.14),transparent_35%),linear-gradient(135deg,rgba(255,255,255,0.98),rgba(236,254,255,0.92))] p-5 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.45)] sm:p-7">
                 <Badge className="border border-teal-100 bg-white/80 text-teal-700">Admin settings</Badge>
                 <Title className="mt-3 text-3xl sm:text-4xl">Admin Control Center</Title>
-                <Subtitle className="max-w-2xl">Manage account IDs and passwords securely. Passwords are never displayed or returned to the browser.</Subtitle>
+                <Subtitle className="max-w-2xl">Manage account IDs securely.</Subtitle>
             </section>
             <Card>
                 <CardHeader>
@@ -400,17 +374,9 @@ function AdminSettings({ email }) {
                                     <Label htmlFor="admin-settings-email">User ID / Email</Label>
                                     <Input id="admin-settings-email" type="email" value={userEmail} onChange={(event) => setUserEmail(event.target.value)} autoComplete="username" disabled={saving} />
                                 </div>
-                                <div>
-                                    <Label htmlFor="admin-settings-password">New Password</Label>
-                                    <Input id="admin-settings-password" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} autoComplete="new-password" placeholder="Leave blank to keep current password" disabled={saving} />
-                                </div>
-                                <div>
-                                    <Label htmlFor="admin-settings-confirm-password">Confirm New Password</Label>
-                                    <Input id="admin-settings-confirm-password" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" placeholder="Repeat new password" disabled={saving} />
-                                </div>
                             </div>
                             <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                                <p className="text-xs leading-5 text-slate-500">Minimum password length: 6 characters. Changing your own account will require signing in again.</p>
+                                <p className="text-xs leading-5 text-slate-500">Update the user ID/email for the selected account.</p>
                                 <Button type="submit" disabled={saving}>{saving ? "Saving..." : "Save account changes"}</Button>
                             </div>
                         </form>
@@ -512,7 +478,7 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
             return rawMaterials;
         }
         return rawMaterials.filter((material) => {
-            return [material.code, material.name, String(material.rate ?? ""), String(material.quantity ?? 0)].join(" ").toLowerCase().includes(needle);
+            return [material.code, material.name, String(material.rate ?? ""), String(material.quantity ?? 0), String(material.date ?? ""), formatRawMaterialDate(material.date)].join(" ").toLowerCase().includes(needle);
         });
     }, [materialSearch, rawMaterials]);
 
@@ -2171,4 +2137,3 @@ function formatDateTime(value) {
         minute: "2-digit"
     });
 }
-
