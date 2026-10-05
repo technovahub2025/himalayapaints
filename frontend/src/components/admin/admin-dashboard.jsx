@@ -478,7 +478,7 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
             return rawMaterials;
         }
         return rawMaterials.filter((material) => {
-            return [material.code, material.name, String(material.rate ?? ""), String(material.quantity ?? 0)].join(" ").toLowerCase().includes(needle);
+            return [material.code, material.name, String(material.rate ?? ""), String(material.quantity ?? 0), String(material.date ?? ""), formatRawMaterialDate(material.date)].join(" ").toLowerCase().includes(needle);
         });
     }, [materialSearch, rawMaterials]);
 
@@ -2137,4 +2137,3 @@ function formatDateTime(value) {
         minute: "2-digit"
     });
 }
-
