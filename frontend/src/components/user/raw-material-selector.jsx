@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { Input } from "@/components/ui";
-export function RawMaterialSelector({ value, options, loading = false, onSelect }) {
+export function RawMaterialSelector({ value, options, loading = false, onSelect, onQueryChange }) {
     const [query, setQuery] = useState("");
     const [open, setOpen] = useState(false);
     useEffect(() => {
@@ -21,6 +21,7 @@ export function RawMaterialSelector({ value, options, loading = false, onSelect 
       <label className="text-sm font-medium text-ink">Raw Material</label>
       <Input type="search" value={query} disabled={loading} onChange={(e) => {
             setQuery(e.target.value);
+            onQueryChange?.(e.target.value);
             setOpen(true);
         }} onFocus={() => setOpen(true)} onBlur={() => window.setTimeout(() => setOpen(false), 120)} placeholder={loading ? "Loading..." : "Search raw materials..."} aria-label="Raw Material"/>
       {open ? (<div className="absolute left-0 right-0 top-full z-20 mt-2 max-h-72 overflow-auto rounded-2xl border border-line bg-white shadow-lg">

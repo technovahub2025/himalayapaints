@@ -41,7 +41,13 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
     const [savingProduction, setSavingProduction] = useState(false);
     const [detailsType, setDetailsType] = useState("product");
     const [selectedRawMaterial, setSelectedRawMaterial] = useState("");
+    const [rawMaterialTableSearch, setRawMaterialTableSearch] = useState("");
     const [rawMaterials, setRawMaterials] = useState([]);
+    const filteredRawMaterials = useMemo(() => {
+        const needle = rawMaterialTableSearch.trim().toLowerCase();
+        if (!needle) return rawMaterials;
+        return rawMaterials.filter((material) => `${material.code || ""} ${material.name || ""}`.toLowerCase().includes(needle));
+    }, [rawMaterials, rawMaterialTableSearch]);
     const [rawMaterialsLoading, setRawMaterialsLoading] = useState(false);
     const [rawMaterialsError, setRawMaterialsError] = useState(null);
     const [rawMaterialImportLoading, setRawMaterialImportLoading] = useState(false);
@@ -1198,7 +1204,7 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
     if (lowStockRows.length > 0) {
         const lowStockLines = lowStockRows.map(
             (row) =>
-                `Low Stock: ${row.name} — Actual Qty: ${formatKgValue(row.actualQty)}, Standard Qty: ${formatKgValue(row.standardQty)}.`
+                `Low Stock: ${row.name} � Actual Qty: ${formatKgValue(row.actualQty)}, Standard Qty: ${formatKgValue(row.standardQty)}.`
         );
 
         const lowStockText = doc.splitTextToSize(
@@ -1239,10 +1245,10 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
 }    
     function formatRawMaterialDate(value) {
         if (!value)
-            return "â€”";
+            return "—";
         const d = new Date(value);
         if (Number.isNaN(d.getTime()))
-            return "â€”";
+            return "—";
         return d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
     }
     const rawMaterialExportRows = rawMaterials.map((material) => {
@@ -1478,6 +1484,7 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
                   options={rawMaterials}
                   loading={rawMaterialsLoading}
                   onSelect={setSelectedRawMaterial}
+                  onQueryChange={setRawMaterialTableSearch}
                 />
               )}
             <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3 lg:flex lg:flex-wrap lg:justify-end">
@@ -1707,12 +1714,12 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
                   </tr>
                 </thead>
                 <tbody>
-                  {rawMaterials.map((material) => {
+                  {filteredRawMaterials.map((material) => {
                     const quantity = Number(material.quantity ?? 0);
                     const dateValue = material.date ? new Date(material.date) : null;
                     const displayDate = dateValue && !Number.isNaN(dateValue.getTime())
                       ? dateValue.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" })
-                      : "â€”";
+                      : "—";
                     return (
                       <tr key={material.code} className="border-t border-slate-200">
                         <td className="px-4 py-3 text-sm font-semibold text-slate-950">{material.code || "-"}</td>
@@ -1731,6 +1738,10 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
 
     </div>);
 }
+
+
+
+
 
 
 
