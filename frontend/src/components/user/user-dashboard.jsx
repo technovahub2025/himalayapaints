@@ -1,5 +1,5 @@
 ﻿"use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileSpreadsheet, FileText, LoaderCircle, Pencil, Printer, RefreshCw, Save, ChevronDown, Download, Upload } from "lucide-react";
 import { calculateGrandTotal, safePercent, scaleQuantity } from "@/lib/calculations";
@@ -1738,6 +1738,7 @@ export function UserDashboard({ initialItems, initialTableName, tableNames, emai
 
     </div>);
 }
+
 
 
 
