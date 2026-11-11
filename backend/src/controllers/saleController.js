@@ -75,7 +75,7 @@ export async function createSale(req, res) {
         if (Number.isNaN(quantity) || quantity <= 0) {
             return res.status(400).json({ message: "Quantity must be a positive number" });
         }
-        const items = await Item.find({ tableName: productName }).lean();
+        const items = await Item.find({ tableName: productName, status: { $ne: "ON_HOLD" } }).lean();
         if (items.length === 0) {
             return res.status(400).json({ message: "Invalid product" });
         }

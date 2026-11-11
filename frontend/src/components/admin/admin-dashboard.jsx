@@ -391,18 +391,19 @@ function createItemDraft(item) {
     return {
         id: String(item?._id ?? item?.id ?? ""),
         code: String(item?.code ?? ""),
-        quantity: String(item?.quantity ?? "")
+        quantity: String(item?.quantity ?? ""),
+        status: String(item?.status ?? "ACTIVE")
     };
 }
 function formatRawMaterialDate(value) {
     if (!value) {
-        return "—";
+        return "ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â";
     }
 
     const date = new Date(value);
 
     if (Number.isNaN(date.getTime())) {
-        return "—";
+        return "ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â";
     }
 
     return date.toLocaleDateString("en-GB", {
@@ -438,6 +439,8 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
     const [selectedTableName, setSelectedTableName] = useState(initialTableName);
     const [tableOptions, setTableOptions] = useState(Array.from(new Set([initialTableName, ...tableNames.filter(Boolean)])).sort());
     const [itemRows, setItemRows] = useState(() => initialItems.map(createItemDraft));
+    const [selectedItemRows, setSelectedItemRows] = useState([]);
+    const [itemStatusFilter, setItemStatusFilter] = useState("ACTIVE");
     const [rawMaterials, setRawMaterials] = useState([]);
     const [productionBatches, setProductionBatches] = useState([]);
     const [sales, setSales] = useState([]);
@@ -448,6 +451,7 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
     const [savingTable, setSavingTable] = useState(false);
     const [savingMaterial, setSavingMaterial] = useState(false);
     const [rawMaterialImportLoading, setRawMaterialImportLoading] = useState(false);
+    const [productImportLoading, setProductImportLoading] = useState(false);
     const [selectedMaterialCodes, setSelectedMaterialCodes] = useState([]);
     const [tableForm, setTableForm] = useState(EMPTY_TABLE_FORM);
     const [tableRateDraft, setTableRateDraft] = useState("");
@@ -467,6 +471,8 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
     const [salesDateFrom, setSalesDateFrom] = useState("");
     const [salesDateTo, setSalesDateTo] = useState("");
     const rawMaterialImportInputRef = useRef(null);
+    const itemImportInputRef = useRef(null);
+    const productImportInputRef = useRef(null);
 
     const materialMap = useMemo(() => {
         return new Map(rawMaterials.map((material) => [normalizeCode(material.code), material]));
@@ -750,24 +756,107 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
             {
                 id: "",
                 code: firstMaterial?.code ?? "",
-                quantity: "0"
+                quantity: "0",
+                status: "ACTIVE"
             }
         ]);
     }
 
+    function toggleItemRowSelection(index) {
+        setSelectedItemRows((current) =>
+            current.includes(index)
+                ? current.filter((selectedIndex) => selectedIndex !== index)
+                : [...current, index]
+        );
+    }
+
+    function toggleAllItemRows() {
+        const visibleIndexes = itemRows
+            .map((row, index) => ({ row, index }))
+            .filter(({ row }) =>
+                itemStatusFilter === "ALL" ||
+                (row.status ?? "ACTIVE") === itemStatusFilter
+            )
+            .map(({ index }) => index);
+
+        setSelectedItemRows((current) => {
+            const allVisibleSelected = visibleIndexes.length > 0 &&
+                visibleIndexes.every((index) => current.includes(index));
+
+            return allVisibleSelected
+                ? current.filter((index) => !visibleIndexes.includes(index))
+                : [...new Set([...current, ...visibleIndexes])];
+        });
+    }
+
+    async function deleteSelectedItemRows() {
+        if (selectedItemRows.length === 0 || savingItems) return;
+
+        const selectedIndexes = new Set(selectedItemRows);
+        const remainingRows = itemRows.filter(
+            (_, index) => !selectedIndexes.has(index)
+        );
+
+        const confirmed = window.confirm(
+            `Delete ${selectedItemRows.length} selected formula(s) from ${selectedTableName}?`
+        );
+
+        if (!confirmed) return;
+
+        await saveItems(remainingRows);
+    }
     function removeItemRow(index) {
         setItemRows((current) => current.filter((_, rowIndex) => rowIndex !== index));
     }
 
-    async function saveItems() {
+    async function updateItemHoldStatus(row, nextStatus) {
+        if (!row.id || savingItems) {
+            toast.error("Save this formula before changing its status.");
+            return;
+        }
+
+        const action = nextStatus === "ON_HOLD"
+            ? "put this formula on hold"
+            : "release this formula";
+
+        if (!window.confirm(`Are you sure you want to ${action}?`)) return;
+
+        try {
+            const data = await apiFetch(
+                `/api/admin/items/${encodeURIComponent(row.id)}/status`,
+                {
+                    method: "PATCH",
+                    json: { status: nextStatus }
+                }
+            );
+
+            const savedStatus = data?.item?.status ?? nextStatus;
+
+            setItemRows((current) =>
+                current.map((item) =>
+                    item.id === row.id
+                        ? { ...item, status: savedStatus }
+                        : item
+                )
+            );
+
+            toast.success(savedStatus === "ON_HOLD"
+                ? "Formula put on hold"
+                : "Formula released and active");
+        } catch (error) {
+            toast.error(error instanceof Error
+                ? error.message
+                : "Failed to update formula status");
+        }
+    }
+
+    async function saveItems(rowsToSave = itemRows) {
         try {
             if (!selectedTableName.trim()) {
                 throw new Error("Select a table before saving items.");
             }
-            if (itemRows.length === 0) {
-                throw new Error("Add at least one item before saving.");
-            }
-            const payloadItems = itemRows.map((row, index) => {
+
+            const payloadItems = rowsToSave.map((row, index) => {
                 const material = materialMap.get(normalizeCode(row.code));
                 if (!material) {
                     throw new Error(`Choose a valid raw material code for row ${index + 1}`);
@@ -792,7 +881,7 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                     items: payloadItems
                 }
             });
-            setItemRows(Array.isArray(data.items) ? data.items.map(createItemDraft) : itemRows);
+            setItemRows(Array.isArray(data.items) ? data.items.map(createItemDraft) : rowsToSave);
             toast.success("Table items saved");
             await loadDashboardData(selectedTableName);
         }
@@ -1064,6 +1153,43 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
         }
     }
 
+    function toggleAllMaterialSelection() {
+        const visibleCodes = filteredMaterials.map((material) => material.code);
+        if (visibleCodes.length === 0) return;
+
+        const allVisibleSelected = visibleCodes.every((code) =>
+            selectedMaterialCodes.includes(code)
+        );
+
+        setSelectedMaterialCodes((current) =>
+            allVisibleSelected
+                ? current.filter((code) => !visibleCodes.includes(code))
+                : [...new Set([...current, ...visibleCodes])]
+        );
+    }
+
+    async function deleteSingleMaterial(code) {
+        if (!window.confirm(`Delete raw material ${code}?`)) return;
+
+        setSavingMaterial(true);
+        try {
+            await apiFetch("/api/admin/raw-materials", {
+                method: "DELETE",
+                json: { codes: [code] }
+            });
+
+            toast.success("Raw material deleted");
+            setSelectedMaterialCodes((current) =>
+                current.filter((entry) => entry !== code)
+            );
+            await loadDashboardData(selectedTableName);
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Failed to delete raw material");
+        } finally {
+            setSavingMaterial(false);
+        }
+    }
+
     function toggleMaterialSelection(code) {
         setSelectedMaterialCodes((current) => {
             if (current.includes(code)) {
@@ -1117,6 +1243,65 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
         }
     }
 
+    function openProductImport() {
+        productImportInputRef.current?.click();
+    }
+
+    async function handleProductImportFileChange(event) {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+
+        if (!file) return;
+
+        const ext = file.name.split(".").pop()?.toLowerCase();
+
+        if (!["xlsx", "xls", "csv"].includes(ext)) {
+            toast.error("Please select a valid Excel or CSV file.");
+            return;
+        }
+
+        if (!selectedTableName) {
+            toast.error("Please select a product table before importing.");
+            return;
+        }
+
+        setProductImportLoading(true);
+
+        try {
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("tableName", selectedTableName);
+
+            const data = await apiFetch("/api/admin/items/import", {
+                method: "POST",
+                body: formData
+            });
+
+            const imported = Number(data.imported ?? 0);
+            const updated = Number(data.updated ?? 0);
+            const failed = Number(data.failed ?? 0);
+
+            if (Array.isArray(data.items)) {
+                setItemRows(data.items.map(createItemDraft));
+                setSelectedItemRows([]);
+            }
+
+            if (failed > 0) {
+                toast.error(
+                    `Import completed with errors. ${imported} imported, ${updated} updated, ${failed} failed.`
+                );
+            } else {
+                toast.success(
+                    `Import completed. ${imported} imported, ${updated} updated.`
+                );
+            }
+        } catch (error) {
+            toast.error(error?.message || "Failed to import product formulas.");
+        } finally {
+            setProductImportLoading(false);
+        }
+    }
+
     const kpiCards = [
         {
             label: "Total Products",
@@ -1141,14 +1326,14 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
         },
         {
             label: "Total KG",
-            value: analyticsTotals.kg === null ? "—" : `${formatAmount(analyticsTotals.kg)} KG`,
+            value: analyticsTotals.kg === null ? "ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â" : `${formatAmount(analyticsTotals.kg)} KG`,
             hint: "Filtered production weight from live batches",
             icon: TrendingUp,
             accent: "from-teal-50 to-white"
         },
         {
             label: "Total Cost",
-            value: analyticsTotals.amount === null ? "—" : formatAmount(analyticsTotals.amount),
+            value: analyticsTotals.amount === null ? "ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â" : formatAmount(analyticsTotals.amount),
             hint: "Formula-derived production cost from live material rates",
             icon: Sparkles,
             accent: "from-amber-50 to-white"
@@ -1382,7 +1567,7 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                     </div>
                     <div className="flex flex-wrap items-end gap-4">
                         <div className="flex-1 min-w-[180px]">
-                            <Label>Rate per KG (₹)</Label>
+                            <Label>Rate per KG (&#8377;)</Label>
                             <Input value={tableRateDraft} onChange={(event) => setTableRateDraft(event.target.value)} inputMode="decimal" placeholder="0.00" disabled={savingTable || !selectedTableName} />
                         </div>
                         <Button variant="secondary" onClick={saveTableRate} disabled={savingTable || !selectedTableName}>
@@ -1421,10 +1606,48 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                     </div>
                 </CardHeader>
                 <CardBody className="space-y-4 p-4 sm:p-6">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="text-sm text-slate-500">{itemRows.length.toLocaleString()} editable row(s)</p>
-                        <div className="flex flex-wrap gap-2">
-                            <Button variant="secondary" onClick={addItemRow} disabled={savingItems}>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex flex-wrap items-center gap-3">
+    <p className="text-sm text-slate-500">{itemRows.length.toLocaleString()} editable row(s)</p>
+    <div className="flex flex-wrap gap-2">
+        <Button variant={itemStatusFilter === "ACTIVE" ? "primary" : "secondary"} onClick={() => setItemStatusFilter("ACTIVE")}>
+            Active ({itemRows.filter((row) => (row.status ?? "ACTIVE") === "ACTIVE").length})
+        </Button>
+        <Button variant={itemStatusFilter === "ON_HOLD" ? "primary" : "secondary"} onClick={() => setItemStatusFilter("ON_HOLD")}>
+            On Hold ({itemRows.filter((row) => row.status === "ON_HOLD").length})
+        </Button>
+        <Button variant={itemStatusFilter === "ALL" ? "primary" : "secondary"} onClick={() => setItemStatusFilter("ALL")}>
+            All ({itemRows.length})
+        </Button>
+    </div>
+</div>
+                                                <div className="flex flex-wrap gap-2">
+                            <Button
+                                variant="secondary"
+                                onClick={toggleAllItemRows}
+                                disabled={itemRows.length === 0 || savingItems}
+                            >
+                                {selectedItemRows.length === itemRows.length && itemRows.length > 0
+                                    ? "Clear Selection"
+                                    : "Select All"}
+                            </Button>
+                            <Button
+                                variant="secondary"
+                                onClick={deleteSelectedItemRows}
+                                disabled={selectedItemRows.length === 0 || savingItems}
+                            >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete Selected ({selectedItemRows.length})
+                            </Button>
+                                  <Button
+        variant="secondary"
+        onClick={openProductImport}
+        disabled={savingItems || productImportLoading}
+      >
+        {productImportLoading
+          ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+          : <Upload className="mr-2 h-4 w-4" />}
+        {productImportLoading ? "Importing..." : "Import Excel"}
+      </Button><Button variant="secondary" onClick={addItemRow} disabled={savingItems}>
                                 <Plus className="mr-2 h-4 w-4" />
                                 Add Row
                             </Button>
@@ -1434,8 +1657,18 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                             </Button>
                         </div>
                     </div>
-                    <div className="grid gap-3 md:hidden">
-                        {itemRows.length > 0 ? itemRows.map((row, index) => {
+                    <input
+    ref={productImportInputRef}
+    type="file"
+    accept=".xlsx,.xls,.csv"
+    className="hidden"
+    onChange={handleProductImportFileChange}
+/><div className="grid gap-3 md:hidden">{itemRows.map((row, index) => ({ row, index }))
+    .filter(({ row }) => itemStatusFilter === "ALL" || (row.status ?? "ACTIVE") === itemStatusFilter)
+    .length > 0
+    ? itemRows.map((row, index) => ({ row, index }))
+        .filter(({ row }) => itemStatusFilter === "ALL" || (row.status ?? "ACTIVE") === itemStatusFilter)
+        .map(({ row, index }) => {
                             const material = materialMap.get(normalizeCode(row.code)) ?? null;
                             const rowRate = Number(material?.rate ?? 0);
                             const rowQuantity = Number(row.quantity || 0);
@@ -1443,15 +1676,31 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                             return (
                                 <div key={row.id || `${selectedTableName}-${index}`} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                                     <div className="flex items-start justify-between gap-3">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedItemRows.includes(index)}
+                                            onChange={() => toggleItemRowSelection(index)}
+                                            aria-label={`Select formula ${index + 1}`}
+                                            className="mt-1 h-4 w-4 rounded border-slate-300"
+                                        />
                                         <div>
                                             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Item</p>
                                             <p className="mt-1 text-sm font-semibold text-slate-950">{material ? material.name : "Select a code"}</p>
                                             <p className="mt-1 text-xs text-slate-500">{row.code || "No code"}</p>
                                         </div>
-                                        <Button variant="ghost" onClick={() => removeItemRow(index)} className="shrink-0">
-                                            <Trash2 className="mr-2 h-4 w-4" />
-                                            Remove
-                                        </Button>
+                                        <div className="flex flex-wrap items-center gap-1">
+                                            <Button
+                                                variant="secondary"
+                                                disabled={!row.id || savingItems}
+                                                onClick={() => updateItemHoldStatus(row, row.status === "ON_HOLD" ? "ACTIVE" : "ON_HOLD")}
+                                            >
+                                                {row.status === "ON_HOLD" ? "Release" : "Hold"}
+                                            </Button>
+                                            <Button variant="ghost" onClick={() => removeItemRow(index)} className="shrink-0">
+                                                <Trash2 className="mr-2 h-4 w-4" />
+                                                Remove
+                                            </Button>
+                                        </div>
                                     </div>
                                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                                         <div>
@@ -1498,8 +1747,12 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                                     <th className="px-4 py-3 font-semibold text-right">Action</th>
                                 </tr>
                             </thead>
-                            <tbody>
-                                {itemRows.length > 0 ? itemRows.map((row, index) => {
+                            <tbody>{itemRows.map((row, index) => ({ row, index }))
+    .filter(({ row }) => itemStatusFilter === "ALL" || (row.status ?? "ACTIVE") === itemStatusFilter)
+    .length > 0
+    ? itemRows.map((row, index) => ({ row, index }))
+        .filter(({ row }) => itemStatusFilter === "ALL" || (row.status ?? "ACTIVE") === itemStatusFilter)
+        .map(({ row, index }) => {
                                     const material = materialMap.get(normalizeCode(row.code)) ?? null;
                                     const rowRate = Number(material?.rate ?? 0);
                                     const rowQuantity = Number(row.quantity || 0);
@@ -1507,7 +1760,13 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                                     return (
                                         <tr key={row.id || `${selectedTableName}-${index}`} className="border-t border-slate-200">
                                             <td className="px-4 py-3">
-                                                <Select value={row.code} onChange={(event) => handleItemChange(index, "code", event.target.value)}>
+                                                <input
+    type="checkbox"
+    checked={selectedItemRows.includes(index)}
+    onChange={() => toggleItemRowSelection(index)}
+    aria-label={`Select formula ${index + 1}`}
+    className="mr-3 h-4 w-4 rounded border-slate-300"
+/><Select value={row.code} onChange={(event) => handleItemChange(index, "code", event.target.value)}>
                                                     <option value="">Select code</option>
                                                     {rawMaterials.map((materialOption) => (
                                                         <option key={materialOption.code} value={materialOption.code}>
@@ -1525,10 +1784,19 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                                             <td className="px-4 py-3 text-sm text-slate-500">{rowRate.toLocaleString()}</td>
                                             <td className="px-4 py-3 text-sm font-semibold text-slate-950">{amount.toLocaleString()}</td>
                                             <td className="px-4 py-3 text-right">
-                                                <Button variant="ghost" onClick={() => removeItemRow(index)}>
-                                                    <Trash2 className="mr-2 h-4 w-4" />
-                                                    Remove
-                                                </Button>
+                                                <div className="flex flex-wrap items-center justify-end gap-1">
+                                            <Button
+                                                variant="secondary"
+                                                disabled={!row.id || savingItems}
+                                                onClick={() => updateItemHoldStatus(row, row.status === "ON_HOLD" ? "ACTIVE" : "ON_HOLD")}
+                                            >
+                                                {row.status === "ON_HOLD" ? "Release" : "Hold"}
+                                            </Button>
+                                            <Button variant="ghost" onClick={() => removeItemRow(index)}>
+                                                <Trash2 className="mr-2 h-4 w-4" />
+                                                Remove
+                                            </Button>
+                                        </div>
                                             </td>
                                         </tr>
                                     );
@@ -1582,6 +1850,12 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                             </div>
                         </div>
                         <div className="flex flex-wrap gap-2 sm:gap-3">
+                            <Button variant="secondary" onClick={toggleAllMaterialSelection} disabled={savingMaterial || filteredMaterials.length === 0}>
+    {filteredMaterials.length > 0 && filteredMaterials.every((material) => selectedMaterialCodes.includes(material.code)) ? "Clear Visible Selection" : "Select All"}
+</Button>
+<Button variant="secondary" onClick={() => setSelectedMaterialCodes([])} disabled={savingMaterial || selectedMaterialCodes.length === 0}>
+    Clear Selection
+</Button>
                             <Button variant="secondary" onClick={createRawMaterial} disabled={savingMaterial}>
                                 <Plus className="mr-2 h-4 w-4" />
                                 Add Raw Material
@@ -1654,7 +1928,7 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
         }
         className="mt-1"
     />
-</div>  
+</div>
                                                     </>
                                                 ) : (
                                                     <>
@@ -1680,9 +1954,14 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                                                         </Button>
                                                     </>
                                                 ) : (
-                                                    <Button variant="ghost" onClick={() => startEditingMaterial(material)} disabled={savingMaterial} size="sm">
-                                                        <Pencil className="h-4 w-4" />
-                                                    </Button>
+                                                    <>
+                    <Button variant="ghost" onClick={() => startEditingMaterial(material)} disabled={savingMaterial} size="sm">
+                        <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button variant="danger" onClick={() => deleteSingleMaterial(material.code)} disabled={savingMaterial} size="sm">
+                        <Trash2 className="h-4 w-4" />
+                    </Button>
+                </>
                                                 )}
                                             </div>
                                         </div>
@@ -1783,10 +2062,16 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
                                                             </Button>
                                                         </>
                                                     ) : (
-                                                        <Button variant="ghost" onClick={() => startEditingMaterial(material)} disabled={savingMaterial}>
-                                                            <Pencil className="mr-2 h-4 w-4" />
-                                                            Edit
-                                                        </Button>
+                                                        <>
+                        <Button variant="ghost" onClick={() => startEditingMaterial(material)} disabled={savingMaterial}>
+                            <Pencil className="mr-2 h-4 w-4" />
+                            Edit
+                        </Button>
+                        <Button variant="danger" onClick={() => deleteSingleMaterial(material.code)} disabled={savingMaterial}>
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                        </Button>
+                    </>
                                                     )}
                                                 </td>
                                             </tr>
@@ -2123,11 +2408,11 @@ export function AdminDashboard({ initialItems, initialTableName, tableNames, ema
 }
 
 function formatDateTime(value) {
-    if (!value) return "—";
+    if (!value) return "ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â";
 
     const date = new Date(value);
 
-    if (Number.isNaN(date.getTime())) return "—";
+    if (Number.isNaN(date.getTime())) return "ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â";
 
     return date.toLocaleString("en-IN", {
         day: "2-digit",

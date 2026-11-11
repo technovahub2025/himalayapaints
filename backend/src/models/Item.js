@@ -5,7 +5,8 @@ const ItemSchema = new Schema({
     name: { type: String, required: true, trim: true },
     quantity: { type: Number, required: true, min: 0 },
     rate: { type: Number, required: true, min: 0 },
-    amount: { type: Number, required: true, min: 0 }
+    amount: { type: Number, required: true, min: 0 },
+    status: { type: String, enum: ["ACTIVE", "ON_HOLD"], default: "ACTIVE" }
 }, { timestamps: true });
 const Item = mongoose.models.Item || mongoose.model("Item", ItemSchema);
 export default Item;
